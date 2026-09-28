@@ -35,6 +35,11 @@ body {
   background: #111 !important;
   font-family: inherit;
 }
+/* Fond de carte "sombre" : tuiles OpenStreetMap standard assombries en CSS
+   (aucune clé API requise, contrairement aux tuiles CARTO qui en exigent une désormais). */
+.map-tiles-dark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.25);
+}
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
   background: #1c1c1f;

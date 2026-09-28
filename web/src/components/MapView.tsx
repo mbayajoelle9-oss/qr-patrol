@@ -68,9 +68,12 @@ export default function MapView({ markers, track, center, zoom = 13, className, 
       if (cancelled || !el.current || mapRef.current) return;
       LRef.current = L;
       const map = L.map(el.current, { zoomControl: true, attributionControl: true }).setView(center || KINSHASA, zoom);
-      const dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 20,
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
+      // Tuiles OpenStreetMap standard assombries en CSS (pas de clé API requise,
+      // contrairement aux tuiles CARTO "dark_all" qui en exigent une depuis leur changement de politique).
+      const dark = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+        className: 'map-tiles-dark',
       });
       const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 19,
