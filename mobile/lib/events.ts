@@ -1,0 +1,14 @@
+// Petit bus d'évènements interne (rafraîchir les écrans après un scan, un incident…)
+type Handler = (payload?: unknown) => void;
+const handlers = new Map<string, Set<Handler>>();
+
+export const bus = {
+  on(event: string, h: Handler) {
+    if (!handlers.has(event)) handlers.set(event, new Set());
+    handlers.get(event)!.add(h);
+    return () => handlers.get(event)?.delete(h);
+  },
+  emit(event: string, payload?: unknown) {
+    handlers.get(event)?.forEach((h) => h(payload));
+  },
+};
