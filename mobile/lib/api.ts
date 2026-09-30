@@ -67,7 +67,7 @@ export async function api<T = unknown>(
 }
 
 /** Envoi d'un fichier (photo / vidéo) — retourne l'id du média. */
-export async function uploadMedia(uri: string, mimeType: string, context: 'incident' | 'scan' | 'intervention', capturedAt?: string) {
+export async function uploadMedia(uri: string, mimeType: string, context: 'incident' | 'scan' | 'intervention' | 'avatar', capturedAt?: string) {
   const ext = mimeType.split('/')[1]?.replace('quicktime', 'mov').replace('jpeg', 'jpg') || 'bin';
   const fd = new FormData();
   // Format attendu par React Native pour l'envoi de fichiers

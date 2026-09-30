@@ -8,7 +8,9 @@ const { sendPush } = require('./push');
 const POPULATE = [
   { path: 'site', select: 'name code location' },
   { path: 'route', select: 'name strictOrder expectedDurationMinutes' },
-  { path: 'agent', select: 'firstName lastName matricule' },
+  { path: 'agent', select: 'firstName lastName matricule photoUrl' },
+  { path: 'shift', select: 'name startTime endTime' },
+  { path: 'roundType', select: 'name color' },
   { path: 'checkpoints.checkpoint', select: 'name code location radius instructions requirePhoto' },
 ];
 
@@ -25,9 +27,19 @@ function emitPatrol(patrol) {
 
 /** Crée une ronde à partir d'un parcours. */
 async function createPatrolFromRoute(route, fields) {
+  // Base pour le chronométrage par point : l'heure planifiée du créneau (ou maintenant, ronde à la demande)
+  const base = fields.scheduledStart ? new Date(fields.scheduledStart) : new Date();
   const cps = [...route.checkpoints]
     .sort((a, b) => a.order - b.order)
-    .map((c) => ({ checkpoint: c.checkpoint, order: c.order, optional: c.optional, status: 'pending' }));
+    .map((c) => {
+      const entry = { checkpoint: c.checkpoint, order: c.order, optional: c.optional, status: 'pending' };
+      if (c.expectedOffsetMinutes != null) {
+        const from = new Date(base.getTime() + c.expectedOffsetMinutes * 60000);
+        entry.expectedFrom = from;
+        entry.expectedTo = new Date(from.getTime() + (c.expectedWindowMinutes ?? 10) * 60000);
+      }
+      return entry;
+    });
   const patrol = new Patrol({
     organization: route.organization,
     site: route.site,
@@ -173,10 +185,12 @@ async function generateScheduledPatrols({ hoursAhead = 24, now = new Date() } = 
         try {
           await createPatrolFromRoute(s.route, {
             schedule: s._id,
+            shift: s.shift || undefined,
+            roundType: s.roundType || undefined,
             slotKey,
             source: 'schedule',
-            eligibleAgents: s.agents,
-            agent: s.agents.length === 1 ? s.agents[0] : undefined,
+            eligibleAgents: s.assignedAgent ? [s.assignedAgent] : s.agents,
+            agent: s.assignedAgent || (s.agents.length === 1 ? s.agents[0] : undefined),
             scheduledStart: start,
             dueBy: due,
             status: PATROL_STATUS.SCHEDULED,

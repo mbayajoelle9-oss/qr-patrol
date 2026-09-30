@@ -8,12 +8,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0B0B0C",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "cd.rooksecurity.qrpatrol.fameco",
@@ -23,6 +17,7 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Pendant votre service, votre position est transmise à la centrale pour votre sécurité.",
         "NSMicrophoneUsageDescription": "Le micro sert à enregistrer le son des vidéos d’incident.",
         "NSPhotoLibraryUsageDescription": "Pour joindre des photos existantes à un rapport d’incident.",
+        "NSFaceIDUsageDescription": "Face ID confirme votre identité à chaque point de contrôle scanné, pour éviter qu’un tiers fasse la ronde à votre place.",
         "UIBackgroundModes": ["location", "fetch", "remote-notification"]
       }
     },
@@ -52,6 +47,14 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "La caméra sert à scanner les QR Codes des points de contrôle et à photographier les incidents.",
@@ -80,6 +83,12 @@
         {
           "color": "#E92026"
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Face ID confirme votre identité à chaque point de contrôle scanné, pour éviter qu’un tiers fasse la ronde à votre place."
+        }
       ]
     ],
     "experiments": {
@@ -87,7 +96,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "858a1a44-f8c5-4007-bfa0-6bfa918747e6"
       }
     }
   }

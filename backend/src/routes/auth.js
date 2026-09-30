@@ -1,12 +1,13 @@
 const router = require('express').Router();
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
-const { User, Organization } = require('../models');
+const { User, Organization, Media } = require('../models');
 const { signToken, requireAuth } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const { asyncHandler, unauthorized, forbidden, badRequest } = require('../utils/http');
 const { ROLES } = require('../utils/constants');
 const { raiseAlert } = require('../services/alerts');
+const { withUrls } = require('../services/media');
 const { escapeRegex } = require('../utils/http');
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
@@ -32,6 +33,9 @@ const loginSchema = z.object({
 
 function publicUser(u, org) {
   const json = u.toJSON();
+  if (json.photo && typeof json.photo === 'object' && json.photo._id) {
+    json.photo = withUrls([json.photo])[0];
+  }
   return {
     ...json,
     organization: org
@@ -54,7 +58,7 @@ router.post(
       if (!org) throw unauthorized('Identifiants incorrects');
       filter.organization = org._id;
     }
-    const candidates = await User.find(filter).limit(5);
+    const candidates = await User.find(filter).populate('photo').limit(5);
     let user = null;
     for (const c of candidates) {
       // eslint-disable-next-line no-await-in-loop
@@ -111,7 +115,25 @@ router.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const org = req.user.organization ? await Organization.findById(req.user.organization) : null;
-    await req.user.populate({ path: 'sites', select: 'name code address location' });
+    await req.user.populate([{ path: 'sites', select: 'name code address location' }, { path: 'photo' }]);
+    res.json({ user: publicUser(req.user, org) });
+  })
+);
+
+// Le compte modifie sa propre photo de profil (mobile ou web)
+router.post(
+  '/photo',
+  requireAuth,
+  validate(z.object({ photo: z.string().regex(/^[a-f0-9]{24}$/i).nullable() })),
+  asyncHandler(async (req, res) => {
+    if (req.body.photo) {
+      const ok = await Media.exists({ _id: req.body.photo, organization: req.user.organization });
+      if (!ok) throw badRequest('Photo invalide');
+    }
+    req.user.photo = req.body.photo || undefined;
+    await req.user.save();
+    await req.user.populate('photo');
+    const org = req.user.organization ? await Organization.findById(req.user.organization) : null;
     res.json({ user: publicUser(req.user, org) });
   })
 );

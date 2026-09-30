@@ -47,6 +47,8 @@ function createApp() {
   app.use('/api/sites', require('./routes/sites'));
   app.use('/api/checkpoints', require('./routes/checkpoints'));
   app.use('/api/routes', require('./routes/parcours'));
+  app.use('/api/round-types', require('./routes/roundTypes'));
+  app.use('/api/shifts', require('./routes/shifts'));
   app.use('/api/schedules', require('./routes/schedules'));
   app.use('/api/patrols', require('./routes/patrols'));
   app.use('/api/scans', require('./routes/scans'));

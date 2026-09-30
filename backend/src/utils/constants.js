@@ -38,6 +38,8 @@ const SCAN_FLAGS = {
   REVOKED_QR: 'REVOKED_QR',
   INVALID_QR: 'INVALID_QR',
   CHECKPOINT_INACTIVE: 'CHECKPOINT_INACTIVE',
+  BIOMETRIC_MISSING: 'BIOMETRIC_MISSING',
+  OUTSIDE_CHECKPOINT_WINDOW: 'OUTSIDE_CHECKPOINT_WINDOW',
 };
 
 const FLAG_LABELS = {
@@ -57,6 +59,8 @@ const FLAG_LABELS = {
   REVOKED_QR: 'QR Code révoqué',
   INVALID_QR: 'QR Code invalide',
   CHECKPOINT_INACTIVE: 'Point de contrôle désactivé',
+  BIOMETRIC_MISSING: 'Vérification biométrique manquante',
+  OUTSIDE_CHECKPOINT_WINDOW: 'Passage hors du créneau horaire attendu pour ce point',
 };
 
 // Anomalies qui entraînent un rejet pur et simple du scan

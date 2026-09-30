@@ -101,7 +101,7 @@ export default function Interventions() {
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   {loc && <Btn title="Itinéraire" icon="🧭" variant="secondary" style={{ flex: 1 }} onPress={() => openMaps(loc.lat, loc.lng, iv.incident.reference)} />}
                   {iv.incident.reportedBy?.phone && (
-                    <Btn title="Appeler l’agent" icon="📞" variant="secondary" style={{ flex: 1 }} onPress={() => Linking.openURL(`tel:${iv.incident.reportedBy?.phone}`)} />
+                    <Btn title="Appeler le rondier" icon="📞" variant="secondary" style={{ flex: 1 }} onPress={() => Linking.openURL(`tel:${iv.incident.reportedBy?.phone}`)} />
                   )}
                 </View>
                 {iv.status === 'dispatched' && <Btn title="Je suis en route" onPress={() => update(iv, 'en_route')} loading={busy === `${iv.id}en_route`} />}

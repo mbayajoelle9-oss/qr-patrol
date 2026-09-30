@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import { useApi } from '@/lib/useApi';
 import { useSocketEvent } from '@/lib/socket';
 import { durationMin, fmtDateTime } from '@/lib/format';
-import type { Patrol, PatrolRoute, Site, User } from '@/lib/types';
+import type { Patrol, PatrolRoute, RoundType, Site, User } from '@/lib/types';
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Select, Table, Td, Textarea, Th, useToast } from '@/components/ui';
 import { PatrolBadge } from '@/components/StatusBadges';
 
@@ -28,10 +28,11 @@ export default function RondesPage() {
   const { data: sites } = useApi<{ items: Site[] }>('/sites');
   const { data: agents } = useApi<{ items: User[] }>('/users', { role: 'agent', active: true });
   const { data: routes } = useApi<{ items: PatrolRoute[] }>('/routes', { active: true });
+  const { data: roundTypes } = useApi<{ items: RoundType[] }>('/round-types', { active: true });
   useSocketEvent('patrol:updated', () => reload(true));
 
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ route: '', agent: '', scheduledStart: '', windowMinutes: 60, notes: '' });
+  const [form, setForm] = useState({ route: '', agent: '', roundType: '', scheduledStart: '', windowMinutes: 60, notes: '' });
   const [busy, setBusy] = useState(false);
 
   async function create() {
@@ -41,12 +42,13 @@ export default function RondesPage() {
         body: {
           route: form.route,
           agent: form.agent || undefined,
+          roundType: form.roundType || undefined,
           scheduledStart: form.scheduledStart ? new Date(form.scheduledStart).toISOString() : undefined,
           windowMinutes: Number(form.windowMinutes),
           notes: form.notes || undefined,
         },
       });
-      toast('Ronde ordonnée — l’agent est notifié');
+      toast('Ronde ajoutée — le rondier est notifié');
       setOpen(false);
       reload(true);
     } catch (e) {
@@ -63,7 +65,7 @@ export default function RondesPage() {
         subtitle="Rondes planifiées, en cours et historique d’exécution"
         actions={
           <Button onClick={() => setOpen(true)}>
-            <Plus className="h-4 w-4" /> Ordonner une ronde
+            <Plus className="h-4 w-4" /> Ajouter une ronde
           </Button>
         }
       />
@@ -87,7 +89,7 @@ export default function RondesPage() {
             ))}
           </Select>
           <Select value={agent} onChange={(e) => { setAgent(e.target.value); setPage(1); }} className="!w-56">
-            <option value="">Tous les agents</option>
+            <option value="">Tous les rondiers</option>
             {agents?.items.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.firstName} {a.lastName}
@@ -107,7 +109,7 @@ export default function RondesPage() {
                 <Th>Prévue</Th>
                 <Th>Parcours</Th>
                 <Th>Site</Th>
-                <Th>Agent</Th>
+                <Th>Rondier</Th>
                 <Th>Points</Th>
                 <Th>Durée</Th>
                 <Th>Statut</Th>
@@ -151,10 +153,10 @@ export default function RondesPage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Ordonner une ronde ponctuelle"
+        title="Ajouter une ronde ponctuelle"
         footer={
           <Button loading={busy} disabled={!form.route} onClick={create}>
-            Envoyer à l’agent
+            Envoyer au rondier
           </Button>
         }
       >
@@ -169,12 +171,22 @@ export default function RondesPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Agent (facultatif)">
+          <Field label="Rondier (facultatif)">
             <Select value={form.agent} onChange={(e) => setForm({ ...form, agent: e.target.value })}>
-              <option value="">— Le premier agent disponible —</option>
+              <option value="">— Le premier rondier disponible —</option>
               {agents?.items.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.firstName} {a.lastName} {a.onDuty ? '· en service' : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Type de ronde (facultatif)">
+            <Select value={form.roundType} onChange={(e) => setForm({ ...form, roundType: e.target.value })}>
+              <option value="">—</option>
+              {roundTypes?.items.map((rt) => (
+                <option key={rt.id} value={rt.id}>
+                  {rt.name}
                 </option>
               ))}
             </Select>

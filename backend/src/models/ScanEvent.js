@@ -17,6 +17,10 @@ const ScanEventSchema = new Schema(
     location: CapturedLocationSchema,
     distanceMeters: Number,
     device: DeviceInfoSchema,
+    // Vérification biométrique (empreinte/faciale) au moment du scan — empêche
+    // qu'un rondier transmette ses identifiants à quelqu'un d'autre pour faire la ronde.
+    biometricVerified: { type: Boolean, default: false },
+    biometricMethod: { type: String, enum: ['fingerprint', 'facial', 'none'], default: 'none' },
     status: { type: String, enum: Object.values(SCAN_STATUS), required: true, index: true },
     flags: [{ type: String }],
     comment: String,

@@ -158,7 +158,7 @@ export default function TeamsPage() {
               {users?.items.map((u) => (
                 <Checkbox
                   key={u.id}
-                  label={`${u.firstName} ${u.lastName} · ${u.role === 'responder' ? 'intervenant' : 'agent'}`}
+                  label={`${u.firstName} ${u.lastName} · ${u.role === 'responder' ? 'intervenant' : 'rondier'}`}
                   checked={form.members.includes(u.id)}
                   onChange={(e) => setForm((f) => ({ ...f, members: e.target.checked ? [...f.members, u.id] : f.members.filter((x) => x !== u.id) }))}
                 />

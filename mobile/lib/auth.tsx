@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body: { identifier, password, client: 'mobile', device, pushToken: pushToken || undefined },
     });
     if (!['agent', 'responder'].includes(res.user.role)) {
-      throw new Error('Cette application est réservée aux agents. La centrale et l’administration se font sur le site web.');
+      throw new Error('Cette application est réservée aux rondiers. La centrale et l’administration se font sur le site web.');
     }
     await secure.setToken(res.token);
     await secure.setUser(res.user);

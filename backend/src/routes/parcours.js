@@ -16,7 +16,14 @@ const routeSchema = z.object({
   name: z.string().min(2).max(120),
   description: z.string().max(1000).optional(),
   checkpoints: z
-    .array(z.object({ checkpoint: objectId, optional: z.boolean().optional() }))
+    .array(
+      z.object({
+        checkpoint: objectId,
+        optional: z.boolean().optional(),
+        expectedOffsetMinutes: z.number().min(0).max(24 * 60).nullable().optional(),
+        expectedWindowMinutes: z.number().min(1).max(24 * 60).nullable().optional(),
+      })
+    )
     .min(1, 'Au moins un point de contrôle'),
   strictOrder: z.boolean().optional(),
   expectedDurationMinutes: z.number().min(1).max(24 * 60).optional(),
@@ -27,7 +34,13 @@ async function normalizeCheckpoints(orgId, siteId, list) {
   const ids = list.map((c) => c.checkpoint);
   const valid = await Checkpoint.countDocuments({ _id: { $in: ids }, site: siteId, organization: orgId });
   if (valid !== new Set(ids).size) throw badRequest('Tous les points doivent appartenir au site du parcours');
-  return list.map((c, i) => ({ checkpoint: c.checkpoint, order: i + 1, optional: !!c.optional }));
+  return list.map((c, i) => ({
+    checkpoint: c.checkpoint,
+    order: i + 1,
+    optional: !!c.optional,
+    expectedOffsetMinutes: c.expectedOffsetMinutes ?? null,
+    expectedWindowMinutes: c.expectedWindowMinutes ?? null,
+  }));
 }
 
 router.get(

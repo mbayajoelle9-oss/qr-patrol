@@ -32,7 +32,13 @@ export default function SiteDetail() {
   const [qrCp, setQrCp] = useState<Checkpoint | null>(null);
   // Parcours
   const [routeOpen, setRouteOpen] = useState<null | 'new' | PatrolRoute>(null);
-  const [routeForm, setRouteForm] = useState<{ name: string; description: string; strictOrder: boolean; expectedDurationMinutes: number; items: { checkpoint: string; optional: boolean }[] }>({
+  const [routeForm, setRouteForm] = useState<{
+    name: string;
+    description: string;
+    strictOrder: boolean;
+    expectedDurationMinutes: number;
+    items: { checkpoint: string; optional: boolean; expectedOffsetMinutes: string; expectedWindowMinutes: string }[];
+  }>({
     name: '',
     description: '',
     strictOrder: false,
@@ -131,7 +137,13 @@ export default function SiteDetail() {
   function openRoute(r: 'new' | PatrolRoute) {
     setRouteOpen(r);
     if (r === 'new') {
-      setRouteForm({ name: '', description: '', strictOrder: false, expectedDurationMinutes: 30, items: activeCps.map((c) => ({ checkpoint: c.id, optional: false })) });
+      setRouteForm({
+        name: '',
+        description: '',
+        strictOrder: false,
+        expectedDurationMinutes: 30,
+        items: activeCps.map((c) => ({ checkpoint: c.id, optional: false, expectedOffsetMinutes: '', expectedWindowMinutes: '' })),
+      });
     } else {
       setRouteForm({
         name: r.name,
@@ -140,7 +152,12 @@ export default function SiteDetail() {
         expectedDurationMinutes: r.expectedDurationMinutes,
         items: [...r.checkpoints]
           .sort((a, b) => a.order - b.order)
-          .map((c) => ({ checkpoint: typeof c.checkpoint === 'string' ? c.checkpoint : c.checkpoint.id, optional: !!c.optional })),
+          .map((c) => ({
+            checkpoint: typeof c.checkpoint === 'string' ? c.checkpoint : c.checkpoint.id,
+            optional: !!c.optional,
+            expectedOffsetMinutes: c.expectedOffsetMinutes != null ? String(c.expectedOffsetMinutes) : '',
+            expectedWindowMinutes: c.expectedWindowMinutes != null ? String(c.expectedWindowMinutes) : '',
+          })),
       });
     }
   }
@@ -162,7 +179,12 @@ export default function SiteDetail() {
       description: routeForm.description || undefined,
       strictOrder: routeForm.strictOrder,
       expectedDurationMinutes: Number(routeForm.expectedDurationMinutes),
-      checkpoints: routeForm.items,
+      checkpoints: routeForm.items.map((it) => ({
+        checkpoint: it.checkpoint,
+        optional: it.optional,
+        expectedOffsetMinutes: it.expectedOffsetMinutes !== '' ? Number(it.expectedOffsetMinutes) : null,
+        expectedWindowMinutes: it.expectedWindowMinutes !== '' ? Number(it.expectedWindowMinutes) : null,
+      })),
     };
     try {
       if (routeOpen === 'new') await api('/routes', { body: { ...body, site: id } });
@@ -507,36 +529,72 @@ export default function SiteDetail() {
             </div>
           </div>
           <div>
-            <p className="mb-2 text-xs font-medium text-steel-2">Points du parcours (dans l’ordre)</p>
+            <p className="mb-2 text-xs font-medium text-steel-2">
+              Points du parcours (dans l’ordre) — chronométrage optionnel : minute à partir de laquelle le rondier est attendu à ce point, et
+              durée de la fenêtre tolérée (ex : offset 10 min, fenêtre 10 min = passage attendu entre 10 et 20 min après le début de la ronde).
+            </p>
             <ol className="space-y-1.5">
               {routeForm.items.map((it, i) => {
                 const cp = cpName(it.checkpoint);
                 return (
-                  <li key={it.checkpoint} className="flex items-center gap-2 rounded-lg border border-line bg-ink px-3 py-2 text-sm">
-                    <span className="w-5 text-steel">{i + 1}.</span>
-                    <span className="flex-1 text-white">
-                      {cp?.code} {cp?.name}
-                    </span>
-                    <label className="flex items-center gap-1 text-[11px] text-steel">
+                  <li key={it.checkpoint} className="rounded-lg border border-line bg-ink px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 text-steel">{i + 1}.</span>
+                      <span className="flex-1 text-white">
+                        {cp?.code} {cp?.name}
+                      </span>
+                      <label className="flex items-center gap-1 text-[11px] text-steel">
+                        <input
+                          type="checkbox"
+                          checked={it.optional}
+                          className="accent-[#e92026]"
+                          onChange={(e) =>
+                            setRouteForm((f) => ({ ...f, items: f.items.map((x, j) => (j === i ? { ...x, optional: e.target.checked } : x)) }))
+                          }
+                        />
+                        facultatif
+                      </label>
+                      <button className="p-1 text-steel hover:text-white" onClick={() => moveItem(i, -1)}>
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button className="p-1 text-steel hover:text-white" onClick={() => moveItem(i, 1)}>
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </button>
+                      <button className="p-1 text-steel hover:text-brand" onClick={() => setRouteForm((f) => ({ ...f, items: f.items.filter((_, j) => j !== i) }))}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2 pl-7 text-[11px] text-steel">
+                      <span>Attendu à</span>
                       <input
-                        type="checkbox"
-                        checked={it.optional}
-                        className="accent-[#e92026]"
+                        type="number"
+                        min={0}
+                        value={it.expectedOffsetMinutes}
                         onChange={(e) =>
-                          setRouteForm((f) => ({ ...f, items: f.items.map((x, j) => (j === i ? { ...x, optional: e.target.checked } : x)) }))
+                          setRouteForm((f) => ({
+                            ...f,
+                            items: f.items.map((x, j) => (j === i ? { ...x, expectedOffsetMinutes: e.target.value } : x)),
+                          }))
                         }
+                        placeholder="—"
+                        className="w-16 rounded border border-line bg-panel px-1.5 py-0.5 text-white"
                       />
-                      facultatif
-                    </label>
-                    <button className="p-1 text-steel hover:text-white" onClick={() => moveItem(i, -1)}>
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button className="p-1 text-steel hover:text-white" onClick={() => moveItem(i, 1)}>
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </button>
-                    <button className="p-1 text-steel hover:text-brand" onClick={() => setRouteForm((f) => ({ ...f, items: f.items.filter((_, j) => j !== i) }))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                      <span>min du début, tolérance ±/fenêtre</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={it.expectedWindowMinutes}
+                        onChange={(e) =>
+                          setRouteForm((f) => ({
+                            ...f,
+                            items: f.items.map((x, j) => (j === i ? { ...x, expectedWindowMinutes: e.target.value } : x)),
+                          }))
+                        }
+                        placeholder="—"
+                        className="w-16 rounded border border-line bg-panel px-1.5 py-0.5 text-white"
+                      />
+                      <span>min</span>
+                    </div>
                   </li>
                 );
               })}
@@ -548,7 +606,12 @@ export default function SiteDetail() {
                   .map((c) => (
                     <button
                       key={c.id}
-                      onClick={() => setRouteForm((f) => ({ ...f, items: [...f.items, { checkpoint: c.id, optional: false }] }))}
+                      onClick={() =>
+                    setRouteForm((f) => ({
+                      ...f,
+                      items: [...f.items, { checkpoint: c.id, optional: false, expectedOffsetMinutes: '', expectedWindowMinutes: '' }],
+                    }))
+                  }
                       className="rounded-md border border-dashed border-line px-2 py-1 text-xs text-steel hover:border-brand hover:text-white"
                     >
                       + {c.code} {c.name}

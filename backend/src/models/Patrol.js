@@ -9,6 +9,8 @@ const PatrolSchema = new Schema(
     site: { type: Types.ObjectId, ref: 'Site', required: true, index: true },
     route: { type: Types.ObjectId, ref: 'Route', required: true },
     schedule: { type: Types.ObjectId, ref: 'Schedule' },
+    shift: { type: Types.ObjectId, ref: 'Shift' },
+    roundType: { type: Types.ObjectId, ref: 'RoundType' },
     slotKey: { type: String }, // idempotence de la génération planifiée
     agent: { type: Types.ObjectId, ref: 'User', index: true },
     eligibleAgents: [{ type: Types.ObjectId, ref: 'User' }],
@@ -30,6 +32,9 @@ const PatrolSchema = new Schema(
         checkpoint: { type: Types.ObjectId, ref: 'Checkpoint', required: true },
         order: Number,
         optional: Boolean,
+        // Chronométrage attendu (calculé depuis scheduledStart/startedAt + la fenêtre définie sur le parcours)
+        expectedFrom: Date,
+        expectedTo: Date,
         scannedAt: Date,
         scan: { type: Types.ObjectId, ref: 'ScanEvent' },
         status: { type: String, enum: ['pending', 'done', 'suspicious', 'missed'], default: 'pending' },

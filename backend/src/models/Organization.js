@@ -21,12 +21,23 @@ const OrganizationSchema = new Schema(
       offlineScanMaxHours: { type: Number, default: 24 },
       enforceDeviceBinding: { type: Boolean, default: true },
       rejectMockLocation: { type: Boolean, default: false },
+      // Empêche qu'un rondier transmette ses identifiants à un tiers pour faire la ronde à sa place :
+      // exige une vérification biométrique (empreinte/faciale) sur le téléphone à chaque point scanné.
+      requireBiometricScan: { type: Boolean, default: true },
       // Rondes
       lateToleranceMinutes: { type: Number, default: 10 },
       positionPingSeconds: { type: Number, default: 60 },
       // Alertes
       alertOnSuspiciousScan: { type: Boolean, default: true },
       alertOnLatePatrol: { type: Boolean, default: true },
+      // Intégration Outlook / Microsoft 365 (synchronisation du planning hebdomadaire vers les
+      // calendriers Outlook des rondiers, et/ou notifications par e-mail). Nécessite une inscription
+      // d'application Azure AD côté client (tenantId / clientId / clientSecret) — voir services/outlook.js.
+      outlookEnabled: { type: Boolean, default: false },
+      outlookTenantId: { type: String, default: '' },
+      outlookClientId: { type: String, default: '' },
+      outlookClientSecret: { type: String, default: '' },
+      outlookMailbox: { type: String, default: '' },
     },
   },
   { timestamps: true }

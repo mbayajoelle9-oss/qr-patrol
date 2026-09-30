@@ -4,6 +4,8 @@ module.exports = {
   Site: require('./Site'),
   Checkpoint: require('./Checkpoint'),
   Route: require('./Route'),
+  RoundType: require('./RoundType'),
+  Shift: require('./Shift'),
   Schedule: require('./Schedule'),
   Patrol: require('./Patrol'),
   ScanEvent: require('./ScanEvent'),

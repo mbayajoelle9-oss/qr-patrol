@@ -130,6 +130,8 @@ router.post(
     z.object({
       route: objectId,
       agent: objectId.optional(),
+      shift: objectId.optional(),
+      roundType: objectId.optional(),
       scheduledStart: z.coerce.date().optional(),
       windowMinutes: z.number().int().min(5).max(24 * 60).default(60),
       notes: z.string().max(1000).optional(),
@@ -145,6 +147,8 @@ router.post(
     const start = req.body.scheduledStart || new Date();
     const patrol = await createPatrolFromRoute(route, {
       agent: req.body.agent,
+      shift: req.body.shift,
+      roundType: req.body.roundType,
       source: 'manual',
       scheduledStart: start,
       dueBy: new Date(start.getTime() + req.body.windowMinutes * 60000),

@@ -4,7 +4,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const config = require('../src/config');
-const { Organization, User, Site, Checkpoint, Route, Schedule, Team } = require('../src/models');
+const { Organization, User, Site, Checkpoint, Route, Schedule, Team, Shift, RoundType } = require('../src/models');
 const { ROLES } = require('../src/utils/constants');
 const { latLngToPoint } = require('../src/utils/geo');
 
@@ -153,6 +153,28 @@ async function main() {
       expectedDurationMinutes: 25,
     });
   }
+  // Type de ronde par défaut + shift de nuit (la ronde est incluse dans le shift)
+  let roundType = await RoundType.findOne({ organization: org._id, name: 'Ronde complète' });
+  if (!roundType) {
+    roundType = await RoundType.create({
+      organization: org._id,
+      name: 'Ronde complète',
+      description: 'Tour complet des points de contrôle du site',
+      requireBiometric: true,
+    });
+  }
+  let shift = await Shift.findOne({ organization: org._id, site: site._id, name: 'Nuit' });
+  if (!shift) {
+    shift = await Shift.create({
+      organization: org._id,
+      site: site._id,
+      name: 'Nuit',
+      startTime: '18:00',
+      endTime: '06:00',
+      rondiers: agents.map((a) => a._id),
+    });
+  }
+
   const hasSchedule = await Schedule.exists({ route: route._id });
   if (!hasSchedule) {
     await Schedule.create({
@@ -160,8 +182,11 @@ async function main() {
       site: site._id,
       route: route._id,
       name: 'Rondes de nuit',
+      shift: shift._id,
+      roundType: roundType._id,
       agents: agents.map((a) => a._id),
-      every: { minutes: 120, fromTime: '18:00', toTime: '06:00' },
+      // Heures fixes (mode recommandé) — remplace l'ancienne fréquence régulière
+      startTimes: ['18:00', '20:00', '22:00', '00:00', '02:00', '04:00', '06:00'],
       windowMinutes: 60,
     });
   }

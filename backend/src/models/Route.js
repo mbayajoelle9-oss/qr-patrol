@@ -14,6 +14,11 @@ const RouteSchema = new Schema(
         checkpoint: { type: Types.ObjectId, ref: 'Checkpoint', required: true },
         order: { type: Number, required: true },
         optional: { type: Boolean, default: false },
+        // Chronométrage : fenêtre horaire attendue pour le passage à ce point, en minutes depuis le
+        // début de la ronde. Ex : offset 10, fenêtre 10 → le rondier doit passer entre 10 et 20 min
+        // après le début de la ronde. Laisser vide = aucune contrainte horaire sur ce point.
+        expectedOffsetMinutes: { type: Number, default: null },
+        expectedWindowMinutes: { type: Number, default: null },
       },
     ],
     strictOrder: { type: Boolean, default: false },

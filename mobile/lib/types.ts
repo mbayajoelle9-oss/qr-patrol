@@ -32,6 +32,7 @@ export interface User {
   dutyStartedAt?: string;
   sites?: { id: string; name: string; address?: string }[];
   organization?: Organization | null;
+  photo?: { id: string; url: string } | null;
 }
 
 export interface Checkpoint {

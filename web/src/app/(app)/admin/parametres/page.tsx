@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { Mail, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/lib/useApi';
 import { useAuth } from '@/lib/auth';
@@ -115,8 +115,49 @@ export default function SettingsPage() {
               onChange={(e) => setS('enforceDeviceBinding', e.target.checked)}
             />
             <Checkbox label="Rejeter les positions GPS simulées" checked={org.settings.rejectMockLocation} onChange={(e) => setS('rejectMockLocation', e.target.checked)} />
+            <Checkbox
+              label="Exiger la vérification biométrique (empreinte/visage) à chaque scan"
+              checked={org.settings.requireBiometricScan}
+              onChange={(e) => setS('requireBiometricScan', e.target.checked)}
+            />
             <Checkbox label="Alerter la centrale sur scan suspect" checked={org.settings.alertOnSuspiciousScan} onChange={(e) => setS('alertOnSuspiciousScan', e.target.checked)} />
             <Checkbox label="Alerter la centrale sur ronde en retard" checked={org.settings.alertOnLatePatrol} onChange={(e) => setS('alertOnLatePatrol', e.target.checked)} />
+          </div>
+        </Card>
+
+        <Card
+          title={
+            <span className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-brand" /> Configuration du système avec Outlook
+            </span>
+          }
+          className="xl:col-span-2"
+        >
+          <div className="space-y-3 p-4">
+            <p className="text-xs text-steel">
+              Synchronise le planning hebdomadaire vers les calendriers Outlook des rondiers et/ou envoie les notifications par e-mail via Microsoft
+              365. Nécessite une inscription d’application dans le portail Azure Active Directory de la société (tenant, identifiant client, secret
+              client) — à demander à votre service informatique.
+            </p>
+            <Checkbox label="Activer l’intégration Outlook" checked={org.settings.outlookEnabled} onChange={(e) => setS('outlookEnabled', e.target.checked)} />
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field label="ID de locataire (Tenant ID)">
+                <Input value={org.settings.outlookTenantId || ''} onChange={(e) => setOrg({ ...org, settings: { ...org.settings, outlookTenantId: e.target.value } })} />
+              </Field>
+              <Field label="ID client (Client ID)">
+                <Input value={org.settings.outlookClientId || ''} onChange={(e) => setOrg({ ...org, settings: { ...org.settings, outlookClientId: e.target.value } })} />
+              </Field>
+              <Field label="Secret client">
+                <Input
+                  type="password"
+                  value={org.settings.outlookClientSecret || ''}
+                  onChange={(e) => setOrg({ ...org, settings: { ...org.settings, outlookClientSecret: e.target.value } })}
+                />
+              </Field>
+              <Field label="Boîte mail / calendrier partagé" hint="Ex. planning@fameco.cd">
+                <Input value={org.settings.outlookMailbox || ''} onChange={(e) => setOrg({ ...org, settings: { ...org.settings, outlookMailbox: e.target.value } })} />
+              </Field>
+            </div>
           </div>
         </Card>
       </div>

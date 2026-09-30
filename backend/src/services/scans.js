@@ -72,6 +72,12 @@ async function recordScan(agent, input) {
           if (before.some((c) => c.status === 'pending')) flags.add(SCAN_FLAGS.OUT_OF_ORDER);
         }
         if (patrol.dueBy && scannedAt > patrol.dueBy) flags.add(SCAN_FLAGS.OUTSIDE_WINDOW);
+        // Chronométrage : le point a une fenêtre horaire de passage attendue (ex : 14h10-14h20)
+        if (entry && entry.expectedFrom && entry.expectedTo) {
+          if (scannedAt < entry.expectedFrom || scannedAt > entry.expectedTo) {
+            flags.add(SCAN_FLAGS.OUTSIDE_CHECKPOINT_WINDOW);
+          }
+        }
       }
     }
   }
@@ -99,6 +105,12 @@ async function recordScan(agent, input) {
   const deviceId = input.device?.deviceId;
   if (agent.boundDevice?.deviceId && deviceId && agent.boundDevice.deviceId !== deviceId) {
     flags.add(SCAN_FLAGS.UNKNOWN_DEVICE);
+  }
+
+  // ---- 5bis. Vérification biométrique ------------------------------------------
+  // Empêche qu'un rondier partage ses identifiants pour faire faire la ronde par un tiers.
+  if (st.requireBiometricScan !== false && !input.biometricVerified) {
+    flags.add(SCAN_FLAGS.BIOMETRIC_MISSING);
   }
 
   // ---- 6. Horodatage -----------------------------------------------------------
@@ -162,6 +174,8 @@ async function recordScan(agent, input) {
     flags: flagList,
     comment: input.comment,
     photo: input.photoMediaId,
+    biometricVerified: !!input.biometricVerified,
+    biometricMethod: input.biometricMethod || (input.biometricVerified ? 'fingerprint' : 'none'),
   });
 
   // ---- 9. Mise à jour de la ronde ---------------------------------------------

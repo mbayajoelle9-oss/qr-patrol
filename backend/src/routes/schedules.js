@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { z } = require('zod');
-const { Schedule, Route, User } = require('../models');
+const { Schedule, Route, User, Shift, RoundType } = require('../models');
 const { requireRole, requireOrg } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
@@ -16,15 +16,23 @@ const scheduleSchema = z
   .object({
     route: objectId,
     name: z.string().max(120).optional(),
+    shift: objectId.optional().nullable(),
+    roundType: objectId.optional().nullable(),
+    // Rondier unique affecté directement à ce planning (mode recommandé)
+    assignedAgent: objectId.optional().nullable(),
+    // Pool d'agents éligibles (mode hérité, utilisé si aucun rondier n'est directement affecté)
     agents: z.array(objectId).default([]),
     daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1).default([0, 1, 2, 3, 4, 5, 6]),
+    // Heures fixes définies par le client (mode recommandé)
     startTimes: z.array(hhmm).default([]),
+    // Fréquence régulière (mode hérité, déprécié)
     every: z
       .object({ minutes: z.number().int().min(10).max(24 * 60), fromTime: hhmm, toTime: hhmm })
       .partial()
       .optional()
       .nullable(),
     windowMinutes: z.number().int().min(5).max(24 * 60).default(60),
+    manual: z.boolean().optional(),
     active: z.boolean().optional(),
     validFrom: z.coerce.date().optional().nullable(),
     validUntil: z.coerce.date().optional().nullable(),
@@ -40,6 +48,18 @@ async function check(orgId, body) {
     const n = await User.countDocuments({ _id: { $in: body.agents }, organization: orgId, role: ROLES.AGENT });
     if (n !== body.agents.length) throw badRequest('Agent invalide');
   }
+  if (body.assignedAgent) {
+    const ok = await User.exists({ _id: body.assignedAgent, organization: orgId, role: ROLES.AGENT });
+    if (!ok) throw badRequest('Rondier invalide');
+  }
+  if (body.shift) {
+    const ok = await Shift.exists({ _id: body.shift, organization: orgId });
+    if (!ok) throw badRequest('Shift invalide');
+  }
+  if (body.roundType) {
+    const ok = await RoundType.exists({ _id: body.roundType, organization: orgId });
+    if (!ok) throw badRequest('Type de ronde invalide');
+  }
   return route;
 }
 
@@ -53,6 +73,9 @@ router.get(
       .populate('route', 'name')
       .populate('site', 'name code')
       .populate('agents', 'firstName lastName matricule')
+      .populate('assignedAgent', 'firstName lastName matricule photoUrl')
+      .populate('shift', 'name startTime endTime')
+      .populate('roundType', 'name color')
       .sort({ createdAt: -1 });
     res.json({ items });
   })

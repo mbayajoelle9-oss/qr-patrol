@@ -1,16 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import clsx from 'clsx';
-import { KeyRound, Pencil, Plus, Smartphone } from 'lucide-react';
+import { Camera, KeyRound, Pencil, Plus, Smartphone } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/lib/useApi';
 import { useAuth } from '@/lib/auth';
 import { ROLE_LABELS, timeAgo } from '@/lib/format';
-import type { Role, Site, Team, User } from '@/lib/types';
+import type { Media, Role, Site, Team, User } from '@/lib/types';
 import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Select, Table, Td, Th, useToast } from '@/components/ui';
 
-const empty = { role: 'agent' as Role, firstName: '', lastName: '', email: '', phone: '', matricule: '', password: '', sites: [] as string[], team: '', active: true };
+const empty = {
+  role: 'agent' as Role,
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  matricule: '',
+  password: '',
+  sites: [] as string[],
+  team: '',
+  active: true,
+  photo: null as Media | null,
+};
 
 export default function UsersPage() {
   const toast = useToast();
@@ -23,7 +35,9 @@ export default function UsersPage() {
   const [open, setOpen] = useState<null | 'new' | User>(null);
   const [form, setForm] = useState(empty);
   const [busy, setBusy] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [secret, setSecret] = useState<{ name: string; password: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   function edit(u: 'new' | User) {
     setOpen(u);
@@ -40,7 +54,24 @@ export default function UsersPage() {
         sites: (u.sites || []).map((s) => s.id),
         team: u.team?.id || '',
         active: u.active,
+        photo: u.photo || null,
       });
+  }
+
+  async function uploadPhoto(file?: File | null) {
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('context', 'avatar');
+      const r = await api<{ media: Media }>('/media', { body: fd });
+      setForm((f) => ({ ...f, photo: r.media }));
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setUploadingPhoto(false);
+    }
   }
 
   async function save() {
@@ -56,6 +87,7 @@ export default function UsersPage() {
       sites: form.sites,
       team: form.team || null,
       active: form.active,
+      photo: form.photo?.id || null,
     };
     try {
       if (open === 'new') {
@@ -91,8 +123,8 @@ export default function UsersPage() {
   return (
     <>
       <PageHeader
-        title="Agents & utilisateurs"
-        subtitle="Agents de terrain, opérateurs de la centrale, intervenants et administrateurs"
+        title="Rondiers & utilisateurs"
+        subtitle="Rondiers de terrain, opérateurs de la centrale, intervenants et administrateurs"
         actions={
           isAdmin && (
             <Button onClick={() => edit('new')}>
@@ -122,6 +154,7 @@ export default function UsersPage() {
           <Table>
             <thead>
               <tr>
+                <Th />
                 <Th>Nom</Th>
                 <Th>Rôle</Th>
                 <Th>Identifiant</Th>
@@ -134,6 +167,17 @@ export default function UsersPage() {
             <tbody>
               {data.items.map((u) => (
                 <tr key={u.id} className={clsx(!u.active && 'opacity-40')}>
+                  <Td>
+                    {u.photo?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.photo.url} alt="" className="h-8 w-8 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-[11px] font-bold text-brand">
+                        {u.firstName[0]}
+                        {u.lastName[0]}
+                      </div>
+                    )}
+                  </Td>
                   <Td className="text-white">
                     <span className={clsx('mr-2 inline-block h-2 w-2 rounded-full', u.online ? 'bg-emerald-500' : 'bg-zinc-700')} />
                     {u.firstName} {u.lastName}
@@ -187,6 +231,31 @@ export default function UsersPage() {
         }
       >
         <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              {form.photo?.url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.photo.url} alt="" className="h-16 w-16 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand/15 text-lg font-bold text-brand">
+                  {(form.firstName[0] || '?') + (form.lastName[0] || '')}
+                </div>
+              )}
+            </div>
+            <div>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => uploadPhoto(e.target.files?.[0])}
+              />
+              <Button size="sm" variant="ghost" loading={uploadingPhoto} onClick={() => fileInput.current?.click()}>
+                <Camera className="h-4 w-4" /> {form.photo ? 'Changer la photo' : 'Ajouter une photo'}
+              </Button>
+              <p className="mt-1 text-xs text-steel">Photo du rondier — visible sur son profil et sa fiche.</p>
+            </div>
+          </div>
           <Field label="Rôle">
             <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
               {(['agent', 'responder', 'supervisor', 'admin'] as Role[]).map((r) => (

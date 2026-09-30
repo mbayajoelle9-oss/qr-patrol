@@ -22,10 +22,16 @@ export interface OrgSettings {
   offlineScanMaxHours: number;
   enforceDeviceBinding: boolean;
   rejectMockLocation: boolean;
+  requireBiometricScan: boolean;
   lateToleranceMinutes: number;
   positionPingSeconds: number;
   alertOnSuspiciousScan: boolean;
   alertOnLatePatrol: boolean;
+  outlookEnabled: boolean;
+  outlookTenantId: string;
+  outlookClientId: string;
+  outlookClientSecret: string;
+  outlookMailbox: string;
 }
 
 export interface Organization {
@@ -70,6 +76,28 @@ export interface User {
   online?: boolean;
   boundDevice?: { deviceId: string; model?: string; os?: string; osVersion?: string };
   organization?: Organization | string | null;
+  photo?: Media | null;
+}
+
+export interface RoundType {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  defaultDurationMinutes?: number;
+  requireBiometric?: boolean;
+  active: boolean;
+}
+
+export interface Shift {
+  id: string;
+  site: Ref;
+  name: string;
+  startTime: string;
+  endTime: string;
+  daysOfWeek: number[];
+  rondiers: User[];
+  active: boolean;
 }
 
 export interface Site {
@@ -109,6 +137,8 @@ export interface RouteCheckpoint {
   checkpoint: Checkpoint | string;
   order: number;
   optional?: boolean;
+  expectedOffsetMinutes?: number | null;
+  expectedWindowMinutes?: number | null;
 }
 
 export interface PatrolRoute {
@@ -127,11 +157,15 @@ export interface Schedule {
   site: Ref;
   route: Ref;
   name?: string;
+  shift?: Ref | null;
+  roundType?: Ref | null;
+  assignedAgent?: User | null;
   agents: User[];
   daysOfWeek: number[];
   startTimes: string[];
   every?: { minutes?: number; fromTime?: string; toTime?: string } | null;
   windowMinutes: number;
+  manual?: boolean;
   active: boolean;
 }
 
@@ -142,6 +176,8 @@ export interface Patrol {
   site: Site | Ref;
   route: PatrolRoute | Ref;
   agent?: User | null;
+  shift?: Ref | null;
+  roundType?: Ref | null;
   status: PatrolStatus;
   source: string;
   scheduledStart?: string;
@@ -153,6 +189,8 @@ export interface Patrol {
     checkpoint: Checkpoint;
     order: number;
     optional?: boolean;
+    expectedFrom?: string;
+    expectedTo?: string;
     scannedAt?: string;
     status: 'pending' | 'done' | 'suspicious' | 'missed';
   }[];
@@ -179,6 +217,8 @@ export interface ScanEvent {
   flagLabels?: string[];
   comment?: string;
   photo?: Media;
+  biometricVerified?: boolean;
+  biometricMethod?: 'fingerprint' | 'facial' | 'none';
   reviewed?: { at?: string; decision?: 'accepted' | 'rejected'; note?: string };
 }
 

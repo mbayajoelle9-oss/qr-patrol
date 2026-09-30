@@ -1,10 +1,10 @@
 import '@/lib/tracking'; // enregistre la tâche de suivi GPS en arrière-plan
 import { useEffect } from 'react';
+import Constants from 'expo-constants';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { startAutoSync } from '@/lib/offline';
 import { colors } from '@/lib/theme';
@@ -23,15 +23,25 @@ function Gate() {
 
   useEffect(() => startAutoSync(), []);
 
-  // Ouvrir l'écran concerné quand on touche une notification
+  // Ouvrir l'écran concerné quand on touche une notification.
+  // Les notifications push distantes ne sont plus supportées dans Expo Go (SDK 53+) :
+  // on ne charge/écoute le module que dans un vrai build (APK), jamais dans Expo Go.
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
-      const data = resp.notification.request.content.data as { type?: string; incidentId?: string };
-      if (data?.type === 'intervention') router.push('/interventions');
-      else if (data?.type === 'incident' && data.incidentId) router.push(`/incident/${data.incidentId}`);
-      else if (data?.type === 'patrol' || data?.type === 'patrol_late') router.push('/');
-    });
-    return () => sub.remove();
+    if (Constants.appOwnership === 'expo') return; // tourne dans Expo Go : on saute
+    let sub: { remove: () => void } | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Notifications = require('expo-notifications');
+      sub = Notifications.addNotificationResponseReceivedListener((resp: any) => {
+        const data = resp.notification.request.content.data as { type?: string; incidentId?: string };
+        if (data?.type === 'intervention') router.push('/interventions');
+        else if (data?.type === 'incident' && data.incidentId) router.push(`/incident/${data.incidentId}`);
+        else if (data?.type === 'patrol' || data?.type === 'patrol_late') router.push('/');
+      });
+    } catch {
+      // ignore : notifications indisponibles dans cet environnement
+    }
+    return () => sub?.remove();
   }, [router]);
 
   if (loading) {

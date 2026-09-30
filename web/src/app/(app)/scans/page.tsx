@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, MapPin, X } from 'lucide-react';
+import { Check, Fingerprint, MapPin, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/lib/useApi';
 import { useSocketEvent } from '@/lib/socket';
@@ -67,7 +67,7 @@ export default function ScansPage() {
             ))}
           </Select>
           <Select value={agent} onChange={(e) => { setAgent(e.target.value); setPage(1); }} className="!w-48">
-            <option value="">Tous les agents</option>
+            <option value="">Tous les rondiers</option>
             {agents?.items.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.firstName} {a.lastName}
@@ -90,10 +90,11 @@ export default function ScansPage() {
             <thead>
               <tr>
                 <Th>Heure</Th>
-                <Th>Agent</Th>
+                <Th>Rondier</Th>
                 <Th>Point</Th>
                 <Th>Distance</Th>
                 <Th>GPS</Th>
+                <Th>Biométrie</Th>
                 <Th>Anomalies</Th>
                 <Th>Statut</Th>
                 <Th>Vérification</Th>
@@ -115,6 +116,17 @@ export default function ScansPage() {
                   </Td>
                   <Td className="tabular-nums">{s.distanceMeters != null ? `${s.distanceMeters} m` : '—'}</Td>
                   <Td className="tabular-nums">{s.location?.accuracy != null ? `±${Math.round(s.location.accuracy)} m` : '—'}</Td>
+                  <Td>
+                    {s.biometricVerified ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                        <Fingerprint className="h-3.5 w-3.5" /> {s.biometricMethod === 'facial' ? 'Visage' : 'Empreinte'}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs text-amber-400">
+                        <Fingerprint className="h-3.5 w-3.5" /> non vérifié
+                      </span>
+                    )}
+                  </Td>
                   <Td className="max-w-xs text-xs text-amber-300">{(s.flagLabels || s.flags).join(' · ') || '—'}</Td>
                   <Td>
                     <ScanBadge status={s.status} />
@@ -167,9 +179,13 @@ export default function ScansPage() {
         {selected && (
           <div className="grid gap-4 md:grid-cols-2">
             <dl className="grid grid-cols-[130px_1fr] gap-y-2 text-sm">
-              <dt className="text-steel">Agent</dt>
+              <dt className="text-steel">Rondier</dt>
               <dd className="text-white">
                 {selected.agent?.firstName} {selected.agent?.lastName} ({selected.agent?.matricule})
+              </dd>
+              <dt className="text-steel">Biométrie</dt>
+              <dd className={selected.biometricVerified ? 'text-emerald-400' : 'text-amber-400'}>
+                {selected.biometricVerified ? `Vérifiée (${selected.biometricMethod === 'facial' ? 'visage' : 'empreinte'})` : 'Non vérifiée'}
               </dd>
               <dt className="text-steel">Point</dt>
               <dd className="text-white">{selected.checkpoint?.name || 'QR inconnu'}</dd>

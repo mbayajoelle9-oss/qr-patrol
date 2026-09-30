@@ -1,12 +1,13 @@
 const router = require('express').Router();
 const crypto = require('crypto');
 const { z } = require('zod');
-const { User, Site, Patrol } = require('../models');
+const { User, Site, Patrol, Media } = require('../models');
 const { requireRole, requireOrg } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const { asyncHandler, notFound, forbidden, escapeRegex, paginate } = require('../utils/http');
 const { ROLES, ADMIN_ROLES, STAFF_ROLES, PATROL_STATUS } = require('../utils/constants');
 const { onlineUserIds, toCentrale } = require('../services/realtime');
+const { withUrls } = require('../services/media');
 const { audit } = require('../services/audit');
 
 router.use(requireOrg);
@@ -23,7 +24,16 @@ const userSchema = z.object({
   sites: z.array(objectId).optional(),
   team: objectId.nullable().optional(),
   active: z.boolean().optional(),
+  photo: objectId.nullable().optional(),
 });
+
+/** Ajoute `photo.url` (lien signé) à un document User sérialisé. */
+function withPhoto(json) {
+  if (json.photo && typeof json.photo === 'object' && json.photo._id) {
+    json.photo = withUrls([json.photo])[0];
+  }
+  return json;
+}
 
 // Liste
 router.get(
@@ -44,13 +54,14 @@ router.get(
       User.find(filter)
         .populate('sites', 'name code')
         .populate('team', 'name')
+        .populate('photo')
         .sort({ lastName: 1 })
         .skip(skip)
         .limit(limit),
       User.countDocuments(filter),
     ]);
     const online = onlineUserIds();
-    res.json({ items: items.map((u) => ({ ...u.toJSON(), online: online.has(String(u._id)) })), total });
+    res.json({ items: items.map((u) => ({ ...withPhoto(u.toJSON()), online: online.has(String(u._id)) })), total });
   })
 );
 
@@ -58,10 +69,13 @@ router.get(
   '/:id',
   requireRole(...STAFF_ROLES),
   asyncHandler(async (req, res) => {
-    const user = await User.findOne({ _id: req.params.id, organization: req.orgId }).populate('sites', 'name code').populate('team', 'name');
+    const user = await User.findOne({ _id: req.params.id, organization: req.orgId })
+      .populate('sites', 'name code')
+      .populate('team', 'name')
+      .populate('photo');
     if (!user) throw notFound('Utilisateur introuvable');
     const currentPatrol = await Patrol.findOne({ agent: user._id, status: PATROL_STATUS.IN_PROGRESS }).populate('route', 'name');
-    res.json({ user: { ...user.toJSON(), online: onlineUserIds().has(String(user._id)) }, currentPatrol });
+    res.json({ user: { ...withPhoto(user.toJSON()), online: onlineUserIds().has(String(user._id)) }, currentPatrol });
   })
 );
 
@@ -69,6 +83,12 @@ async function checkSites(orgId, sites) {
   if (!sites?.length) return;
   const n = await Site.countDocuments({ _id: { $in: sites }, organization: orgId });
   if (n !== sites.length) throw forbidden('Site invalide');
+}
+
+async function checkPhoto(orgId, photoId) {
+  if (!photoId) return;
+  const ok = await Media.exists({ _id: photoId, organization: orgId });
+  if (!ok) throw forbidden('Photo invalide');
 }
 
 // Création
@@ -79,6 +99,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { password, email, ...data } = req.body;
     await checkSites(req.orgId, data.sites);
+    await checkPhoto(req.orgId, data.photo);
     const user = new User({ ...data, email: email || undefined, organization: req.orgId });
     // Mot de passe temporaire si non fourni (agents : code à 6 chiffres)
     const tempPassword = password || String(crypto.randomInt(100000, 999999));
@@ -99,6 +120,7 @@ router.patch(
     if (!user) throw notFound('Utilisateur introuvable');
     const { password, email, ...data } = req.body;
     await checkSites(req.orgId, data.sites);
+    await checkPhoto(req.orgId, data.photo);
     Object.assign(user, data);
     if (email !== undefined) user.email = email || undefined;
     if (password) {

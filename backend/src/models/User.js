@@ -15,7 +15,8 @@ const UserSchema = new Schema(
     passwordHash: { type: String, required: true },
     tokenVersion: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
-    photoUrl: String,
+    photoUrl: String, // ancien champ, non utilisé (voir `photo`)
+    photo: { type: Types.ObjectId, ref: 'Media' }, // photo de profil du rondier
 
     // Affectation (agents)
     sites: [{ type: Types.ObjectId, ref: 'Site' }],

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, Text, TextInput, View } from 'react-native';
-import { api } from '@/lib/api';
+import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { api, uploadMedia } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/config';
 import { getDeviceInfo, type DeviceInfo } from '@/lib/device';
@@ -11,18 +12,37 @@ import { colors } from '@/lib/theme';
 import { Btn, Card, SectionTitle, styles } from '@/components/ui';
 
 export default function Profil() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [tracking, setTracking] = useState(false);
   const [pending, setPending] = useState(0);
   const [pw, setPw] = useState({ current: '', next: '' });
   const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   useEffect(() => {
     getDeviceInfo().then(setDevice);
     isTracking().then(setTracking);
     return subscribePending(setPending);
   }, []);
+
+  async function changePhoto() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6, allowsEditing: true, aspect: [1, 1] });
+    if (picked.canceled || !picked.assets?.[0]) return;
+    setPhotoBusy(true);
+    try {
+      const a = picked.assets[0];
+      const mediaId = await uploadMedia(a.uri, a.mimeType || 'image/jpeg', 'avatar');
+      await api('/auth/photo', { body: { photo: mediaId } });
+      await refresh();
+    } catch (e) {
+      Alert.alert('Photo', (e as Error).message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   async function changePassword() {
     setBusy(true);
@@ -56,13 +76,42 @@ export default function Profil() {
         <Image source={require('../../assets/logo-fameco.png')} style={{ width: 220, height: 73 }} resizeMode="contain" />
       </View>
       <Card>
-        <Text style={styles.h1}>
-          {user?.firstName} {user?.lastName}
-        </Text>
-        <Text style={styles.muted}>
-          {user?.role === 'responder' ? 'Intervenant' : 'Agent de sécurité'} · {user?.matricule}
-        </Text>
-        <Text style={[styles.muted, { marginTop: 6 }]}>Société : {org?.name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <Pressable onPress={changePhoto} disabled={photoBusy}>
+            {user?.photo?.url ? (
+              <Image source={{ uri: user.photo.url }} style={{ width: 64, height: 64, borderRadius: 32 }} />
+            ) : (
+              <View
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
+                  backgroundColor: colors.panel,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 22, fontWeight: '900', color: colors.brand }}>
+                  {(user?.firstName?.[0] || '') + (user?.lastName?.[0] || '')}
+                </Text>
+              </View>
+            )}
+            <Text style={{ color: colors.brand, fontSize: 11, fontWeight: '700', marginTop: 6, textAlign: 'center' }}>
+              {photoBusy ? '...' : user?.photo ? 'Changer' : '+ Photo'}
+            </Text>
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.h1}>
+              {user?.firstName} {user?.lastName}
+            </Text>
+            <Text style={styles.muted}>
+              {user?.role === 'responder' ? 'Intervenant' : 'Rondier'} · {user?.matricule}
+            </Text>
+          </View>
+        </View>
+        <Text style={[styles.muted, { marginTop: 10 }]}>Société : {org?.name}</Text>
         <Text style={styles.muted}>Sites : {user?.sites?.map((s) => s.name).join(', ') || '—'}</Text>
       </Card>
 

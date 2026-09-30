@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, NetworkError, uploadMedia } from '@/lib/api';
@@ -15,7 +16,8 @@ import { colors } from '@/lib/theme';
 import type { CapturedLocation, ScanResult } from '@/lib/types';
 import { Btn, styles } from '@/components/ui';
 
-type Phase = 'scanning' | 'locating' | 'sending' | 'result';
+type Phase = 'scanning' | 'verifying' | 'locating' | 'sending' | 'result';
+type BiometricMethod = 'fingerprint' | 'facial' | 'none';
 
 interface LocalResult {
   kind: 'server' | 'offline';
@@ -49,20 +51,41 @@ export default function ScanScreen() {
     setPhase('scanning');
   }
 
-  async function onScanned(e: BarcodeScanningResult) {
-    if (lock.current || phase !== 'scanning') return;
-    lock.current = true;
-    const scannedAt = new Date().toISOString();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+  /** Vérification biométrique (empreinte/visage) — empêche qu'un rondier partage ses identifiants. */
+  async function verifyBiometric(): Promise<{ verified: boolean; method: BiometricMethod }> {
+    try {
+      const [hasHardware, enrolled] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+      ]);
+      if (!hasHardware || !enrolled) return { verified: false, method: 'none' };
+      const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+      const method: BiometricMethod = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
+        ? 'facial'
+        : 'fingerprint';
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Confirmez votre identité pour ce point de contrôle',
+        cancelLabel: 'Annuler',
+        disableDeviceFallback: false,
+      });
+      return { verified: result.success, method };
+    } catch {
+      return { verified: false, method: 'none' };
+    }
+  }
+
+  async function sendScan(data: string, scannedAt: string, bio: { verified: boolean; method: BiometricMethod }) {
     setPhase('locating');
     const [location, device] = await Promise.all([getScanLocation(8000), getDeviceInfo()]);
     setPhase('sending');
     const payload = {
-      payload: e.data,
+      payload: data,
       scannedAt,
       clientId: uuid(),
       location: location || undefined,
       device,
+      biometricVerified: bio.verified,
+      biometricMethod: bio.method,
     };
     try {
       const r = await api<ScanResult>('/scans', { body: payload, timeoutMs: 15000 });
@@ -84,6 +107,45 @@ export default function ScanScreen() {
       }
     }
     setPhase('result');
+  }
+
+  async function onScanned(e: BarcodeScanningResult) {
+    if (lock.current || phase !== 'scanning') return;
+    lock.current = true;
+    const scannedAt = new Date().toISOString();
+    const data = e.data;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    setPhase('verifying');
+    const bio = await verifyBiometric();
+    if (!bio.verified) {
+      Alert.alert(
+        'Vérification requise',
+        'Confirmez votre identité (empreinte ou visage) pour valider ce passage. Cela évite qu’une autre personne fasse la ronde à votre place.',
+        [
+          {
+            text: 'Réessayer',
+            onPress: async () => {
+              const retry = await verifyBiometric();
+              if (retry.verified) sendScan(data, scannedAt, retry);
+              else {
+                Alert.alert(
+                  'Toujours pas vérifié',
+                  'Le passage sera tout de même enregistré, mais signalé à la centrale comme non vérifié.',
+                  [{ text: 'Continuer', onPress: () => sendScan(data, scannedAt, retry) }]
+                );
+              }
+            },
+          },
+          {
+            text: 'Continuer sans',
+            style: 'destructive',
+            onPress: () => sendScan(data, scannedAt, bio),
+          },
+        ]
+      );
+      return;
+    }
+    await sendScan(data, scannedAt, bio);
   }
 
   async function addPhoto() {
@@ -238,11 +300,11 @@ export default function ScanScreen() {
           </Pressable>
         </View>
       </SafeAreaView>
-      {(phase === 'locating' || phase === 'sending') && (
+      {(phase === 'verifying' || phase === 'locating' || phase === 'sending') && (
         <View style={s.overlay}>
           <ActivityIndicator size="large" color={colors.brand} />
           <Text style={{ color: '#fff', marginTop: 14, fontSize: 16, fontWeight: '700' }}>
-            {phase === 'locating' ? 'Localisation GPS…' : 'Enregistrement du passage…'}
+            {phase === 'verifying' ? 'Vérification d’identité…' : phase === 'locating' ? 'Localisation GPS…' : 'Enregistrement du passage…'}
           </Text>
         </View>
       )}

@@ -17,10 +17,17 @@ const settingsSchema = z
     offlineScanMaxHours: z.number().min(1).max(168),
     enforceDeviceBinding: z.boolean(),
     rejectMockLocation: z.boolean(),
+    requireBiometricScan: z.boolean(),
     lateToleranceMinutes: z.number().min(0).max(240),
     positionPingSeconds: z.number().min(15).max(900),
     alertOnSuspiciousScan: z.boolean(),
     alertOnLatePatrol: z.boolean(),
+    // Intégration Outlook / Microsoft 365 (synchronisation des plannings, notifications par e-mail)
+    outlookEnabled: z.boolean(),
+    outlookTenantId: z.string().max(200),
+    outlookClientId: z.string().max(200),
+    outlookClientSecret: z.string().max(500),
+    outlookMailbox: z.string().max(200),
   })
   .partial();
 

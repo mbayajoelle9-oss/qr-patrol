@@ -10,7 +10,9 @@ import {
   Bell,
   Building2,
   CalendarClock,
+  Clock,
   FileClock,
+  Fingerprint,
   Footprints,
   LogOut,
   MapPin,
@@ -40,8 +42,10 @@ const CENTRALE: Item[] = [
 
 const ADMIN: Item[] = [
   { href: '/admin/sites', label: 'Sites & points', icon: MapPin, roles: ['admin', 'super_admin'] },
+  { href: '/admin/shifts', label: 'Shifts', icon: Clock, roles: ['admin', 'super_admin'] },
+  { href: '/admin/types-rondes', label: 'Types de rondes', icon: Fingerprint, roles: ['admin', 'super_admin'] },
   { href: '/admin/plannings', label: 'Plannings', icon: CalendarClock, roles: ['admin', 'super_admin'] },
-  { href: '/admin/utilisateurs', label: 'Agents & utilisateurs', icon: Users },
+  { href: '/admin/utilisateurs', label: 'Rondiers & utilisateurs', icon: Users },
   { href: '/admin/equipes', label: 'Équipes d’intervention', icon: UsersRound },
   { href: '/admin/parametres', label: 'Paramètres', icon: Settings, roles: ['admin', 'super_admin'] },
   { href: '/admin/journal', label: 'Journal d’audit', icon: FileClock, roles: ['admin', 'super_admin'] },
@@ -114,10 +118,15 @@ export function Sidebar({ unreadAlerts }: { unreadAlerts: number }) {
           </div>
         )}
         <div className="flex items-center gap-3 rounded-lg px-3 py-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/20 text-sm font-bold text-brand">
-            {user.firstName[0]}
-            {user.lastName[0]}
-          </div>
+          {user.photo?.url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={user.photo.url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/20 text-sm font-bold text-brand">
+              {user.firstName[0]}
+              {user.lastName[0]}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-white">
               {user.firstName} {user.lastName}

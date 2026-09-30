@@ -45,6 +45,8 @@ const scanSchema = z.object({
     .optional(),
   comment: z.string().max(1000).optional(),
   photoMediaId: objectId.optional(),
+  biometricVerified: z.boolean().optional(),
+  biometricMethod: z.enum(['fingerprint', 'facial', 'none']).optional(),
 });
 
 // Scan d'un point de contrôle
