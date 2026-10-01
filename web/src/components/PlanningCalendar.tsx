@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import { useApi } from '@/lib/useApi';
 import { fmtTime, PATROL_STATUS } from '@/lib/format';
 import type { PatrolOccurrence, PatrolRoute, RoundType, Schedule, Shift, User } from '@/lib/types';
-import { Badge, Button, Empty, Field, Input, Loading, Modal, Select, useToast } from '@/components/ui';
+import { Badge, Button, Empty, ErrorBox, Field, Input, Loading, Modal, Select, useToast } from '@/components/ui';
 
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D']; // lundi → dimanche
 const MONTHS = [
@@ -68,7 +68,7 @@ export default function PlanningCalendar({ schedules, routes, agents, shifts, ro
   const [dragOverShift, setDragOverShift] = useState<string>('');
 
   const selectedYmd = selected ? ymd(selected) : null;
-  const { data, loading, reload } = useApi<{ date: string; items: PatrolOccurrence[] }>(selectedYmd ? '/patrols/day' : null, selectedYmd ? { date: selectedYmd } : undefined);
+  const { data, error, loading, reload } = useApi<{ date: string; items: PatrolOccurrence[] }>(selectedYmd ? '/patrols/day' : null, selectedYmd ? { date: selectedYmd } : undefined);
 
   // Jours ayant au moins un planning actif couvrant ce jour de semaine — pastille indicative sur le calendrier.
   const activeDows = useMemo(() => {
@@ -250,6 +250,8 @@ export default function PlanningCalendar({ schedules, routes, agents, shifts, ro
       >
         {loading ? (
           <Loading />
+        ) : error ? (
+          <ErrorBox error={error} />
         ) : !items.length ? (
           <Empty>Aucun rondier affecté ce jour-là. Utilisez « Ajouter un rondier » ci-dessous.</Empty>
         ) : (

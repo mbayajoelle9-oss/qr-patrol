@@ -203,7 +203,18 @@ async function occurrencesForDate(orgId, dateStr, { site } = {}) {
     { path: 'site', select: 'name code' },
   ]);
 
-  // Créneaux attendus pour la journée, par planning (y compris ceux démarrés la veille au soir)
+  // Source de vérité : TOUTES les rondes déjà matérialisées (en base) ce jour-là, quelle que soit
+  // leur origine (planning actif ou non, désormais modifié/supprimé, ronde ponctuelle, agent…).
+  // On ne se fie pas uniquement au recalcul des créneaux de planning ci-dessous : un planning
+  // désactivé, modifié ou supprimé après coup ne doit pas faire disparaître une ronde déjà créée.
+  const dayFilter = { organization: orgId, scheduledStart: { $gte: dayStart, $lt: dayEnd } };
+  if (site) dayFilter.site = site;
+  const dayPatrols = await Patrol.find(dayFilter).populate(POPULATE).sort({ scheduledStart: 1 });
+  const bySlotKey = new Map(dayPatrols.filter((p) => p.slotKey).map((p) => [p.slotKey, p]));
+  const usedIds = new Set();
+
+  // Créneaux attendus pour la journée, par planning actif (y compris ceux démarrés la veille au soir) —
+  // sert uniquement à proposer les créneaux futurs pas encore générés par le planificateur (24 h à l'avance).
   const slots = [];
   for (const s of schedules) {
     if (!s.route || !s.route.active) continue;
@@ -224,23 +235,12 @@ async function occurrencesForDate(orgId, dateStr, { site } = {}) {
     }
   }
 
-  const slotKeys = slots.map((s) => s.slotKey);
-  const [bySlot, adHoc] = await Promise.all([
-    slotKeys.length ? Patrol.find({ slotKey: { $in: slotKeys } }).populate(POPULATE) : [],
-    Patrol.find({
-      organization: orgId,
-      schedule: null,
-      scheduledStart: { $gte: dayStart, $lt: dayEnd },
-      ...(site ? { site } : {}),
-    }).populate(POPULATE),
-  ]);
-  const bySlotKey = new Map(bySlot.map((p) => [p.slotKey, p]));
-
   const items = [];
   for (const { schedule: s, start, slotKey } of slots) {
     const real = bySlotKey.get(slotKey);
     if (real) {
       items.push({ ...toClientJSON(real), virtual: false });
+      usedIds.add(String(real._id));
       continue;
     }
     const due = new Date(start.getTime() + (s.windowMinutes || 60) * 60000);
@@ -264,7 +264,13 @@ async function occurrencesForDate(orgId, dateStr, { site } = {}) {
       stats: { total: s.route?.checkpoints?.length || 0, done: 0, suspicious: 0, missed: 0, incidents: 0 },
     });
   }
-  for (const p of adHoc) items.push({ ...toClientJSON(p), virtual: false });
+
+  // Toute ronde réelle de la journée pas déjà rattachée à un créneau de planning recalculé ci-dessus
+  // (planning désactivé/modifié/supprimé depuis, ronde ponctuelle, ou tout autre cas) : on l'affiche quand même.
+  for (const p of dayPatrols) {
+    if (usedIds.has(String(p._id))) continue;
+    items.push({ ...toClientJSON(p), virtual: false });
+  }
 
   items.sort((a, b) => new Date(a.scheduledStart) - new Date(b.scheduledStart));
   return items;
