@@ -86,8 +86,8 @@ router.get(
   '/day',
   requireRole(...STAFF_ROLES),
   asyncHandler(async (req, res) => {
-    const items = await occurrencesForDate(req.orgId, req.query.date, { site: req.query.site || undefined });
-    res.json({ date: req.query.date, items });
+    const { items, corruptedCount } = await occurrencesForDate(req.orgId, req.query.date, { site: req.query.site || undefined });
+    res.json({ date: req.query.date, items, corruptedCount });
   })
 );
 
@@ -231,7 +231,7 @@ router.patch(
       if (!route) route = await Route.findOne({ _id: patrol.route, organization: req.orgId });
       if (route) patrol.checkpoints = buildCheckpointEntries(route, patrol.scheduledStart || new Date());
     }
-    const windowMinutes = body.windowMinutes ?? Math.round(((patrol.dueBy || patrol.scheduledStart) - patrol.scheduledStart) / 60000) || 60;
+    const windowMinutes = body.windowMinutes ?? (Math.round(((patrol.dueBy || patrol.scheduledStart) - patrol.scheduledStart) / 60000) || 60);
     if (patrol.scheduledStart) patrol.dueBy = new Date(new Date(patrol.scheduledStart).getTime() + windowMinutes * 60000);
     patrol.recomputeStats();
     await patrol.save();

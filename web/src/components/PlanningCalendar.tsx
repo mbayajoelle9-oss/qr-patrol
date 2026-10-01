@@ -68,7 +68,10 @@ export default function PlanningCalendar({ schedules, routes, agents, shifts, ro
   const [dragOverShift, setDragOverShift] = useState<string>('');
 
   const selectedYmd = selected ? ymd(selected) : null;
-  const { data, error, loading, reload } = useApi<{ date: string; items: PatrolOccurrence[] }>(selectedYmd ? '/patrols/day' : null, selectedYmd ? { date: selectedYmd } : undefined);
+  const { data, error, loading, reload } = useApi<{ date: string; items: PatrolOccurrence[]; corruptedCount?: number }>(
+    selectedYmd ? '/patrols/day' : null,
+    selectedYmd ? { date: selectedYmd } : undefined
+  );
 
   // Jours ayant au moins un planning actif couvrant ce jour de semaine — pastille indicative sur le calendrier.
   const activeDows = useMemo(() => {
@@ -257,6 +260,11 @@ export default function PlanningCalendar({ schedules, routes, agents, shifts, ro
         ) : (
           <div className="space-y-4">
             <p className="text-xs text-steel">Glissez une carte d’un bloc à l’autre pour changer le shift du rondier.</p>
+            {!!data?.corruptedCount && (
+              <Badge tone="warning">
+                {data.corruptedCount} ronde(s) de ce jour ignorée(s) — donnée abîmée (référence invalide), à vérifier côté serveur.
+              </Badge>
+            )}
             {lanes.map((lane) => (
               <div
                 key={lane.shift?.id || '__none__'}

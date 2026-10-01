@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { Patrol, Route, Schedule, Organization, User } = require('../models');
 const { PATROL_STATUS } = require('../utils/constants');
 const { zonedParts, zonedDate, parseHHmm, localDayBounds } = require('../utils/time');
@@ -16,6 +17,22 @@ const POPULATE = [
 ];
 
 const AGENT_SELECT = 'firstName lastName matricule photo active';
+
+// Populate léger pour le calendrier journalier : pas besoin du détail des points de passage
+// (l'UI n'affiche que le total/fait via `stats`), ce qui évite aussi qu'une référence de
+// checkpoint abîmée sur une vieille ronde de test ne fasse planter tout l'affichage du jour.
+const DAY_POPULATE = [
+  { path: 'site', select: 'name code location' },
+  { path: 'route', select: 'name strictOrder expectedDurationMinutes' },
+  { path: 'agent', select: AGENT_SELECT, populate: { path: 'photo' } },
+  { path: 'shift', select: 'name startTime endTime' },
+  { path: 'roundType', select: 'name color' },
+];
+
+/** Vrai si la valeur est absente ou est un ObjectId Mongo valide (évite les CastError au populate). */
+function refIsSafe(v) {
+  return v == null || mongoose.isValidObjectId(v);
+}
 
 async function populatePatrol(patrol) {
   return Patrol.populate(patrol, POPULATE);
@@ -209,7 +226,23 @@ async function occurrencesForDate(orgId, dateStr, { site } = {}) {
   // désactivé, modifié ou supprimé après coup ne doit pas faire disparaître une ronde déjà créée.
   const dayFilter = { organization: orgId, scheduledStart: { $gte: dayStart, $lt: dayEnd } };
   if (site) dayFilter.site = site;
-  const dayPatrols = await Patrol.find(dayFilter).populate(POPULATE).sort({ scheduledStart: 1 });
+  const dayPatrolsRaw = await Patrol.find(dayFilter).sort({ scheduledStart: 1 });
+  // Une ronde dont une référence (site/route/agent/shift/type) n'est pas un ObjectId valide ferait
+  // planter le populate() pour TOUTE la journée : on l'isole plutôt que de bloquer tout le calendrier.
+  const corrupted = [];
+  const safe = [];
+  for (const p of dayPatrolsRaw) {
+    const ok = refIsSafe(p.site) && refIsSafe(p.route) && refIsSafe(p.agent) && refIsSafe(p.shift) && refIsSafe(p.roundType);
+    if (ok) safe.push(p);
+    else corrupted.push(p);
+  }
+  if (corrupted.length) {
+    console.warn(
+      '[occurrencesForDate] ronde(s) ignorée(s) — référence invalide :',
+      corrupted.map((p) => p._id.toString())
+    );
+  }
+  const dayPatrols = safe.length ? await Patrol.populate(safe, DAY_POPULATE) : [];
   const bySlotKey = new Map(dayPatrols.filter((p) => p.slotKey).map((p) => [p.slotKey, p]));
   const usedIds = new Set();
 
@@ -273,7 +306,7 @@ async function occurrencesForDate(orgId, dateStr, { site } = {}) {
   }
 
   items.sort((a, b) => new Date(a.scheduledStart) - new Date(b.scheduledStart));
-  return items;
+  return { items, corruptedCount: corrupted.length };
 }
 
 /** Transforme une occurrence virtuelle en véritable Patrol (idempotent via slotKey). */
