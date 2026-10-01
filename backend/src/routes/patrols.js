@@ -10,11 +10,16 @@ const {
   populatePatrol,
   emitPatrol,
   createPatrolFromRoute,
+  buildCheckpointEntries,
   startPatrol,
   finalizePatrol,
+  occurrencesForDate,
+  resolvePatrol,
+  toClientJSON,
 } = require('../services/patrols');
 const { localDayBounds } = require('../utils/time');
 const { sendPush } = require('../services/push');
+const { audit } = require('../services/audit');
 
 router.use(requireOrg);
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i);
@@ -45,7 +50,7 @@ router.get(
     })
       .populate([{ path: 'route', select: 'name' }, { path: 'site', select: 'name' }])
       .sort({ endedAt: -1 });
-    res.json({ current, upcoming, done });
+    res.json({ current: current ? toClientJSON(current) : null, upcoming: upcoming.map(toClientJSON), done });
   })
 );
 
@@ -74,6 +79,17 @@ router.post(
 );
 
 // --- Centrale ----------------------------------------------------------------
+
+// Calendrier journalier (superviseur) : toutes les rondes/rondiers affectés à une date donnée,
+// qu'elles soient déjà générées ou encore de simples créneaux de planning à venir.
+router.get(
+  '/day',
+  requireRole(...STAFF_ROLES),
+  asyncHandler(async (req, res) => {
+    const items = await occurrencesForDate(req.orgId, req.query.date, { site: req.query.site || undefined });
+    res.json({ date: req.query.date, items });
+  })
+);
 
 router.get(
   '/',
@@ -116,7 +132,7 @@ router.get(
       .populate('checkpoint', 'name code')
       .sort({ scannedAt: 1 });
     res.json({
-      patrol,
+      patrol: toClientJSON(patrol),
       scans: scans.map((s) => ({ ...s.toJSON(), flagLabels: (s.flags || []).map((f) => FLAG_LABELS[f] || f) })),
     });
   })
@@ -164,7 +180,65 @@ router.post(
         data: { type: 'patrol', patrolId: String(patrol._id) },
       });
     }
-    res.status(201).json({ patrol });
+    res.status(201).json({ patrol: toClientJSON(patrol) });
+  })
+);
+
+// Modification depuis le calendrier du superviseur : rondier, shift, type de ronde, parcours,
+// heure ou délai. Accepte un id réel ou un id « virtuel » (créneau de planning pas encore généré),
+// qu'elle matérialise alors en véritable ronde avant d'appliquer les changements.
+const patrolPatchSchema = z
+  .object({
+    agent: objectId.nullable(),
+    shift: objectId.nullable(),
+    roundType: objectId.nullable(),
+    route: objectId,
+    scheduledStart: z.coerce.date(),
+    windowMinutes: z.number().int().min(5).max(24 * 60),
+  })
+  .partial();
+
+router.patch(
+  '/:id',
+  requireRole(...STAFF_ROLES),
+  validate(patrolPatchSchema),
+  asyncHandler(async (req, res) => {
+    const patrol = await resolvePatrol(req.orgId, req.params.id);
+    if (!patrol) throw notFound('Ronde introuvable');
+    if (patrol.status !== PATROL_STATUS.SCHEDULED) {
+      throw badRequest('Seule une ronde pas encore commencée peut être modifiée');
+    }
+    const body = req.body;
+    if (body.agent !== undefined) {
+      if (body.agent) {
+        const ok = await User.exists({ _id: body.agent, organization: req.orgId, role: ROLES.AGENT });
+        if (!ok) throw badRequest('Agent invalide');
+      }
+      patrol.agent = body.agent || undefined;
+    }
+    if (body.shift !== undefined) patrol.shift = body.shift || undefined;
+    if (body.roundType !== undefined) patrol.roundType = body.roundType || undefined;
+    let route = null;
+    if (body.route) {
+      route = await Route.findOne({ _id: body.route, organization: req.orgId, active: true });
+      if (!route) throw badRequest('Parcours invalide');
+      patrol.route = route._id;
+      patrol.site = route.site;
+    }
+    if (body.scheduledStart) patrol.scheduledStart = body.scheduledStart;
+    if (route || body.scheduledStart) {
+      // Les horaires attendus par point dépendent du parcours et/ou de l'heure de départ : on les recalcule.
+      if (!route) route = await Route.findOne({ _id: patrol.route, organization: req.orgId });
+      if (route) patrol.checkpoints = buildCheckpointEntries(route, patrol.scheduledStart || new Date());
+    }
+    const windowMinutes = body.windowMinutes ?? Math.round(((patrol.dueBy || patrol.scheduledStart) - patrol.scheduledStart) / 60000) || 60;
+    if (patrol.scheduledStart) patrol.dueBy = new Date(new Date(patrol.scheduledStart).getTime() + windowMinutes * 60000);
+    patrol.recomputeStats();
+    await patrol.save();
+    await populatePatrol(patrol);
+    emitPatrol(patrol);
+    audit(req, 'patrol.updated', 'Patrol', patrol._id, body);
+    res.json({ patrol: toClientJSON(patrol) });
   })
 );
 
@@ -173,7 +247,8 @@ router.post(
   requireRole(...STAFF_ROLES),
   validate(z.object({ reason: z.string().max(500).optional() })),
   asyncHandler(async (req, res) => {
-    const patrol = await Patrol.findOne({ _id: req.params.id, organization: req.orgId });
+    const isVirtual = String(req.params.id).startsWith('virtual:');
+    const patrol = isVirtual ? await resolvePatrol(req.orgId, req.params.id) : await Patrol.findOne({ _id: req.params.id, organization: req.orgId });
     if (!patrol) throw notFound('Ronde introuvable');
     if (![PATROL_STATUS.SCHEDULED, PATROL_STATUS.IN_PROGRESS].includes(patrol.status)) {
       throw badRequest('Cette ronde ne peut plus être annulée');
@@ -184,7 +259,8 @@ router.post(
     await patrol.save();
     await populatePatrol(patrol);
     emitPatrol(patrol);
-    res.json({ patrol });
+    audit(req, 'patrol.cancelled', 'Patrol', patrol._id, req.body);
+    res.json({ patrol: toClientJSON(patrol) });
   })
 );
 

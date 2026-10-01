@@ -198,6 +198,30 @@ export interface Patrol {
   notes?: string;
 }
 
+/**
+ * Occurrence d'une ronde pour le calendrier superviseur (GET /patrols/day) : soit une ronde déjà
+ * générée (virtual=false, id réel, modifiable/annulable directement), soit un créneau encore
+ * « virtuel » issu d'un planning actif mais pas encore matérialisé (virtual=true, id de la forme
+ * "virtual:<scheduleId>:<isoDate>") — toute action dessus la matérialise d'abord côté serveur.
+ */
+export interface PatrolOccurrence {
+  id: string;
+  virtual: boolean;
+  site: Ref;
+  route: Ref;
+  schedule?: string | null;
+  shift?: Ref | null;
+  roundType?: Ref | null;
+  agent?: User | null;
+  eligibleAgents?: User[];
+  status: PatrolStatus;
+  source: string;
+  scheduledStart: string;
+  dueBy?: string;
+  checkpoints: { checkpoint: Ref; order: number; optional?: boolean; status: string }[];
+  stats: { total: number; done: number; suspicious: number; missed: number; incidents: number };
+}
+
 export type ScanStatus = 'valid' | 'suspicious' | 'rejected';
 
 export interface ScanEvent {

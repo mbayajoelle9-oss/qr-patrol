@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { CalendarClock, LayoutGrid, List, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarClock, CalendarDays, LayoutGrid, List, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/lib/useApi';
 import { DAYS } from '@/lib/format';
 import type { PatrolRoute, RoundType, Schedule, Shift, User } from '@/lib/types';
 import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Select, useToast } from '@/components/ui';
+import PlanningCalendar from '@/components/PlanningCalendar';
 
 type Mode = 'times' | 'every';
 const empty = {
@@ -38,7 +39,7 @@ export default function PlanningsPage() {
   const [open, setOpen] = useState<null | 'new' | Schedule>(null);
   const [form, setForm] = useState(empty);
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState<'list' | 'week'>('week');
+  const [view, setView] = useState<'list' | 'week' | 'calendar'>('week');
 
   // Planning hebdomadaire : lundi → dimanche, une ligne par rondier affecté, une pastille par ronde.
   // Reconstruit à partir des plannings existants (chaque planning est déjà reproduit chaque semaine
@@ -159,6 +160,12 @@ export default function PlanningsPage() {
               >
                 <List className="h-3.5 w-3.5" /> Liste
               </button>
+              <button
+                onClick={() => setView('calendar')}
+                className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs', view === 'calendar' ? 'bg-brand text-white' : 'bg-transparent text-steel hover:text-white')}
+              >
+                <CalendarDays className="h-3.5 w-3.5" /> Calendrier
+              </button>
             </div>
             <Button onClick={() => edit('new')} disabled={!routes?.items.length}>
               <Plus className="h-4 w-4" /> Nouveau planning
@@ -169,6 +176,20 @@ export default function PlanningsPage() {
       <ErrorBox error={error} />
       {loading && !data ? (
         <Loading />
+      ) : view === 'calendar' ? (
+        !routes?.items.length ? (
+          <Card>
+            <Empty>Créez d’abord un parcours de ronde dans un site.</Empty>
+          </Card>
+        ) : (
+          <PlanningCalendar
+            schedules={data?.items || []}
+            routes={routes.items}
+            agents={agents?.items || []}
+            shifts={shifts?.items || []}
+            roundTypes={roundTypes?.items || []}
+          />
+        )
       ) : !data?.items.length ? (
         <Card>
           <Empty>{routes?.items.length ? 'Aucun planning.' : 'Créez d’abord un parcours de ronde dans un site.'}</Empty>

@@ -4,32 +4,42 @@ const { zonedParts, zonedDate, parseHHmm, localDayBounds } = require('../utils/t
 const { toCentrale, toUser } = require('./realtime');
 const { raiseAlert } = require('./alerts');
 const { sendPush } = require('./push');
+const { withUrls } = require('./media');
 
 const POPULATE = [
   { path: 'site', select: 'name code location' },
   { path: 'route', select: 'name strictOrder expectedDurationMinutes' },
-  { path: 'agent', select: 'firstName lastName matricule photoUrl' },
+  { path: 'agent', select: 'firstName lastName matricule photo active', populate: { path: 'photo' } },
   { path: 'shift', select: 'name startTime endTime' },
   { path: 'roundType', select: 'name color' },
   { path: 'checkpoints.checkpoint', select: 'name code location radius instructions requirePhoto' },
 ];
 
+const AGENT_SELECT = 'firstName lastName matricule photo active';
+
 async function populatePatrol(patrol) {
   return Patrol.populate(patrol, POPULATE);
 }
 
-function emitPatrol(patrol) {
+/** Sérialise une ronde en ajoutant un lien signé pour la photo du rondier, si présente. */
+function toClientJSON(patrol) {
   const json = typeof patrol.toJSON === 'function' ? patrol.toJSON() : patrol;
+  if (json.agent && json.agent.photo && json.agent.photo._id) {
+    json.agent = { ...json.agent, photo: withUrls([json.agent.photo])[0] };
+  }
+  return json;
+}
+
+function emitPatrol(patrol) {
+  const json = toClientJSON(patrol);
   toCentrale(patrol.organization, 'patrol:updated', json);
   const agentId = patrol.agent?._id || patrol.agent;
   if (agentId) toUser(agentId, 'patrol:updated', json);
 }
 
-/** Crée une ronde à partir d'un parcours. */
-async function createPatrolFromRoute(route, fields) {
-  // Base pour le chronométrage par point : l'heure planifiée du créneau (ou maintenant, ronde à la demande)
-  const base = fields.scheduledStart ? new Date(fields.scheduledStart) : new Date();
-  const cps = [...route.checkpoints]
+/** Construit la liste des points (checkpoints) d'une ronde à partir d'un parcours, avec chronométrage. */
+function buildCheckpointEntries(route, base) {
+  return [...route.checkpoints]
     .sort((a, b) => a.order - b.order)
     .map((c) => {
       const entry = { checkpoint: c.checkpoint, order: c.order, optional: c.optional, status: 'pending' };
@@ -40,11 +50,17 @@ async function createPatrolFromRoute(route, fields) {
       }
       return entry;
     });
+}
+
+/** Crée une ronde à partir d'un parcours. */
+async function createPatrolFromRoute(route, fields) {
+  // Base pour le chronométrage par point : l'heure planifiée du créneau (ou maintenant, ronde à la demande)
+  const base = fields.scheduledStart ? new Date(fields.scheduledStart) : new Date();
   const patrol = new Patrol({
     organization: route.organization,
     site: route.site,
     route: route._id,
-    checkpoints: cps,
+    checkpoints: buildCheckpointEntries(route, base),
     ...fields,
   });
   patrol.recomputeStats();
@@ -129,6 +145,164 @@ async function finalizePatrol(patrol, { by = 'agent', notes } = {}) {
     });
   }
   return patrol;
+}
+
+// ---------------------------------------------------------------------------
+// Calendrier journalier (superviseur) — vue « type Outlook »
+// ---------------------------------------------------------------------------
+
+/** Jour de la semaine (0=dimanche … 6=samedi) d'une date calendaire, indépendant du fuseau horaire. */
+function dayOfWeekForDate(y, m, d) {
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+function parseDateParam(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || '').trim());
+  if (!m) return null;
+  return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
+}
+
+/** Identifiant virtuel d'une occurrence non encore matérialisée en Patrol. */
+function virtualId(scheduleId, startIso) {
+  return `virtual:${scheduleId}:${startIso}`;
+}
+
+function parseVirtualId(id) {
+  const m = /^virtual:([a-f0-9]{24}):(.+)$/i.exec(String(id || ''));
+  if (!m) return null;
+  return { scheduleId: m[1], startIso: m[2] };
+}
+
+/**
+ * Liste, pour une date calendaire donnée (fuseau de l'organisation), toutes les occurrences de
+ * ronde à afficher sur le calendrier du superviseur : les rondes déjà matérialisées (planifiées,
+ * en cours, terminées, ponctuelles…) et les créneaux encore « virtuels » issus des plannings actifs
+ * (pas encore générés par le planificateur, qui ne couvre que les 24 h à venir).
+ */
+async function occurrencesForDate(orgId, dateStr, { site } = {}) {
+  const d = parseDateParam(dateStr);
+  if (!d) throw Object.assign(new Error('Date invalide (attendu AAAA-MM-JJ)'), { status: 400 });
+  const dow = dayOfWeekForDate(d.year, d.month, d.day);
+  const dayStart = zonedDate(d.year, d.month, d.day, 0, 0);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
+
+  // La veille est aussi consultée : un créneau « fréquence régulière » de nuit (ex. 22:00 → 06:00)
+  // commencé la veille peut se prolonger, voire démarrer, après minuit (jour demandé).
+  const prevDate = new Date(Date.UTC(d.year, d.month - 1, d.day - 1));
+  const prev = { year: prevDate.getUTCFullYear(), month: prevDate.getUTCMonth() + 1, day: prevDate.getUTCDate() };
+  const prevDow = dayOfWeekForDate(prev.year, prev.month, prev.day);
+
+  const scheduleFilter = { organization: orgId, active: true, daysOfWeek: { $in: [dow, prevDow] } };
+  if (site) scheduleFilter.site = site;
+  const schedules = await Schedule.find(scheduleFilter).populate([
+    { path: 'route', select: 'name site active' },
+    { path: 'shift', select: 'name startTime endTime' },
+    { path: 'roundType', select: 'name color' },
+    { path: 'assignedAgent', select: AGENT_SELECT, populate: { path: 'photo' } },
+    { path: 'agents', select: AGENT_SELECT, populate: { path: 'photo' } },
+    { path: 'site', select: 'name code' },
+  ]);
+
+  // Créneaux attendus pour la journée, par planning (y compris ceux démarrés la veille au soir)
+  const slots = [];
+  for (const s of schedules) {
+    if (!s.route || !s.route.active) continue;
+    if (s.validFrom && s.validFrom > dayEnd) continue;
+    if (s.validUntil && s.validUntil < dayStart) continue;
+    const refDays = [];
+    if (s.daysOfWeek.includes(dow)) refDays.push(d);
+    if (s.daysOfWeek.includes(prevDow)) refDays.push(prev);
+    const seen = new Set();
+    for (const ref of refDays) {
+      for (const start of slotTimesForDay(s, ref)) {
+        if (start < dayStart || start >= dayEnd) continue; // hors de la journée demandée
+        const slotKey = `${s._id}:${start.toISOString()}`;
+        if (seen.has(slotKey)) continue;
+        seen.add(slotKey);
+        slots.push({ schedule: s, start, slotKey });
+      }
+    }
+  }
+
+  const slotKeys = slots.map((s) => s.slotKey);
+  const [bySlot, adHoc] = await Promise.all([
+    slotKeys.length ? Patrol.find({ slotKey: { $in: slotKeys } }).populate(POPULATE) : [],
+    Patrol.find({
+      organization: orgId,
+      schedule: null,
+      scheduledStart: { $gte: dayStart, $lt: dayEnd },
+      ...(site ? { site } : {}),
+    }).populate(POPULATE),
+  ]);
+  const bySlotKey = new Map(bySlot.map((p) => [p.slotKey, p]));
+
+  const items = [];
+  for (const { schedule: s, start, slotKey } of slots) {
+    const real = bySlotKey.get(slotKey);
+    if (real) {
+      items.push({ ...toClientJSON(real), virtual: false });
+      continue;
+    }
+    const due = new Date(start.getTime() + (s.windowMinutes || 60) * 60000);
+    const agentJson = s.assignedAgent ? toClientJSON({ agent: s.assignedAgent.toJSON() }).agent : null;
+    items.push({
+      id: virtualId(s._id, start.toISOString()),
+      virtual: true,
+      organization: orgId,
+      site: s.site,
+      route: s.route,
+      schedule: s.id,
+      shift: s.shift || null,
+      roundType: s.roundType || null,
+      agent: agentJson,
+      eligibleAgents: s.assignedAgent ? [] : s.agents,
+      status: 'scheduled',
+      source: 'schedule',
+      scheduledStart: start,
+      dueBy: due,
+      checkpoints: [],
+      stats: { total: s.route?.checkpoints?.length || 0, done: 0, suspicious: 0, missed: 0, incidents: 0 },
+    });
+  }
+  for (const p of adHoc) items.push({ ...toClientJSON(p), virtual: false });
+
+  items.sort((a, b) => new Date(a.scheduledStart) - new Date(b.scheduledStart));
+  return items;
+}
+
+/** Transforme une occurrence virtuelle en véritable Patrol (idempotent via slotKey). */
+async function materializeVirtualPatrol(orgId, id) {
+  const parsed = parseVirtualId(id);
+  if (!parsed) return null;
+  const existing = await Patrol.findOne({ slotKey: `${parsed.scheduleId}:${parsed.startIso}` });
+  if (existing) return existing;
+  const schedule = await Schedule.findOne({ _id: parsed.scheduleId, organization: orgId }).populate('route');
+  if (!schedule || !schedule.route) throw Object.assign(new Error('Planning introuvable'), { status: 404 });
+  const start = new Date(parsed.startIso);
+  const due = new Date(start.getTime() + (schedule.windowMinutes || 60) * 60000);
+  try {
+    return await createPatrolFromRoute(schedule.route, {
+      schedule: schedule._id,
+      shift: schedule.shift || undefined,
+      roundType: schedule.roundType || undefined,
+      slotKey: `${parsed.scheduleId}:${parsed.startIso}`,
+      source: 'schedule',
+      eligibleAgents: schedule.assignedAgent ? [schedule.assignedAgent] : schedule.agents,
+      agent: schedule.assignedAgent || (schedule.agents.length === 1 ? schedule.agents[0] : undefined),
+      scheduledStart: start,
+      dueBy: due,
+      status: PATROL_STATUS.SCHEDULED,
+    });
+  } catch (e) {
+    if (e.code === 11000) return Patrol.findOne({ slotKey: `${parsed.scheduleId}:${parsed.startIso}` });
+    throw e;
+  }
+}
+
+/** Résout un id (réel ou virtuel) vers un document Patrol réel, en le matérialisant si besoin. */
+async function resolvePatrol(orgId, id) {
+  if (String(id).startsWith('virtual:')) return materializeVirtualPatrol(orgId, id);
+  return Patrol.findOne({ _id: id, organization: orgId });
 }
 
 // ---------------------------------------------------------------------------
@@ -282,12 +456,17 @@ async function checkLateAndMissed(now = new Date()) {
 module.exports = {
   POPULATE,
   populatePatrol,
+  toClientJSON,
   emitPatrol,
   createPatrolFromRoute,
+  buildCheckpointEntries,
   startPatrol,
   finalizePatrol,
   generateScheduledPatrols,
   checkLateAndMissed,
   slotTimesForDay,
   zonedParts,
+  occurrencesForDate,
+  materializeVirtualPatrol,
+  resolvePatrol,
 };
