@@ -209,6 +209,11 @@ router.patch(
       throw badRequest('Seule une ronde pas encore commencée peut être modifiée');
     }
     const body = req.body;
+    // Calculé AVANT toute réassignation de scheduledStart/dueBy ci-dessous, sinon un déplacement
+    // (glisser-déposer) qui ne renvoie que la nouvelle heure recalculerait un délai incohérent
+    // (ancienne dueBy − nouvelle scheduledStart).
+    const originalWindowMinutes =
+      patrol.dueBy && patrol.scheduledStart ? Math.round((patrol.dueBy.getTime() - patrol.scheduledStart.getTime()) / 60000) : 60;
     if (body.agent !== undefined) {
       if (body.agent) {
         const ok = await User.exists({ _id: body.agent, organization: req.orgId, role: ROLES.AGENT });
@@ -231,7 +236,7 @@ router.patch(
       if (!route) route = await Route.findOne({ _id: patrol.route, organization: req.orgId });
       if (route) patrol.checkpoints = buildCheckpointEntries(route, patrol.scheduledStart || new Date());
     }
-    const windowMinutes = body.windowMinutes ?? (Math.round(((patrol.dueBy || patrol.scheduledStart) - patrol.scheduledStart) / 60000) || 60);
+    const windowMinutes = body.windowMinutes ?? originalWindowMinutes ?? 60;
     if (patrol.scheduledStart) patrol.dueBy = new Date(new Date(patrol.scheduledStart).getTime() + windowMinutes * 60000);
     patrol.recomputeStats();
     await patrol.save();

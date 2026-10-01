@@ -164,7 +164,7 @@ export default function PlanningsPage() {
                 onClick={() => setView('calendar')}
                 className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs', view === 'calendar' ? 'bg-brand text-white' : 'bg-transparent text-steel hover:text-white')}
               >
-                <CalendarDays className="h-3.5 w-3.5" /> Calendrier
+                <CalendarDays className="h-3.5 w-3.5" /> Calendrier de Configuration
               </button>
             </div>
             <Button onClick={() => edit('new')} disabled={!routes?.items.length}>
