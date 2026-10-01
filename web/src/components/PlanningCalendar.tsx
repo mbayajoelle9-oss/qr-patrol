@@ -345,12 +345,26 @@ export default function PlanningCalendar({ schedules, routes, agents, shifts, ro
     { key: 'month', label: 'Mois' },
   ];
 
+  // Jours/occurrences à mettre sur la feuille de service imprimée (à afficher aux valves).
+  const printDays = useMemo(() => {
+    if (view === 'month') return selected ? [{ date: selected, items }] : [];
+    return visibleDays.map((d) => ({ date: d, items: rangeItems[ymd(d)] || [] }));
+  }, [view, selected, items, visibleDays, rangeItems]);
+
+  function handlePrint() {
+    if (!printDays.length) {
+      toast('Choisissez d’abord un jour (clic sur une date en vue Mois) ou passez en vue Jour/Semaine avant d’imprimer.', 'info');
+      return;
+    }
+    window.print();
+  }
+
   return (
     <div className="space-y-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-steel">Calendrier de Configuration</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-steel print:hidden">Calendrier de Configuration</p>
 
       {/* Barre d'outils façon Outlook */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-panel p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-panel p-3 print:hidden">
         <div className="flex items-center gap-2">
           <Button onClick={() => openAddAt(anchor, 8)} disabled={!routes.length}>
             <Plus className="h-4 w-4" /> Ajouter un rondier
@@ -380,13 +394,13 @@ export default function PlanningCalendar({ schedules, routes, agents, shifts, ro
               </button>
             ))}
           </div>
-          <Button size="sm" variant="ghost" onClick={() => window.print()} title="Imprimer">
+          <Button size="sm" variant="ghost" onClick={handlePrint} title="Imprimer la feuille de service">
             <Printer className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row">
+      <div className="flex flex-col gap-4 lg:flex-row print:hidden">
         {/* Mini calendrier (navigation rapide, comme la colonne de gauche d'Outlook) */}
         <div className="w-full shrink-0 rounded-xl border border-line bg-panel p-3 lg:w-64">
           <div className="mb-2 flex items-center justify-between">
@@ -591,6 +605,55 @@ export default function PlanningCalendar({ schedules, routes, agents, shifts, ro
             </div>
           )}
         </div>
+      </div>
+
+      {/* Feuille de service imprimable — affichée uniquement à l'impression (à poster aux valves) */}
+      <div className="hidden bg-white p-6 text-black print:block">
+        <h1 className="mb-4 text-lg font-bold">Feuille de service — rondiers affectés</h1>
+        {!printDays.length ? (
+          <p className="text-sm">Aucun jour sélectionné.</p>
+        ) : (
+          printDays.map(({ date, items: dayItems }) => {
+            const sorted = [...dayItems].sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart));
+            return (
+              <div key={ymd(date)} className="mb-6 break-inside-avoid">
+                <h2 className="mb-2 border-b border-black pb-1 text-sm font-semibold capitalize">
+                  {date.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                </h2>
+                {!sorted.length ? (
+                  <p className="text-xs italic">Aucun rondier affecté ce jour-là.</p>
+                ) : (
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr>
+                        <th className="border border-black px-2 py-1 text-left">Heure</th>
+                        <th className="border border-black px-2 py-1 text-left">Rondier</th>
+                        <th className="border border-black px-2 py-1 text-left">Matricule</th>
+                        <th className="border border-black px-2 py-1 text-left">Shift</th>
+                        <th className="border border-black px-2 py-1 text-left">Type de ronde</th>
+                        <th className="border border-black px-2 py-1 text-left">Parcours / point de passage</th>
+                        <th className="border border-black px-2 py-1 text-left">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted.map((it) => (
+                        <tr key={it.id}>
+                          <td className="border border-black px-2 py-1">{fmtTime(it.scheduledStart)}</td>
+                          <td className="border border-black px-2 py-1">{agentLabel(it.agent) || 'Non affecté'}</td>
+                          <td className="border border-black px-2 py-1">{it.agent?.matricule || '—'}</td>
+                          <td className="border border-black px-2 py-1">{it.shift && typeof it.shift !== 'string' ? it.shift.name : '—'}</td>
+                          <td className="border border-black px-2 py-1">{it.roundType && typeof it.roundType !== 'string' ? it.roundType.name : '—'}</td>
+                          <td className="border border-black px-2 py-1">{typeof it.route === 'string' ? it.route : it.route.name}</td>
+                          <td className="border border-black px-2 py-1">{PATROL_STATUS[it.status]?.label || it.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Panneau détaillé du jour (vue Mois, ou clic sur l'en-tête d'un jour en vue Semaine/Jour) */}
