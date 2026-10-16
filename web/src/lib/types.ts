@@ -149,6 +149,7 @@ export interface PatrolRoute {
   checkpoints: RouteCheckpoint[];
   strictOrder: boolean;
   expectedDurationMinutes: number;
+  startTime?: string | null;
   active: boolean;
 }
 

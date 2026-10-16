@@ -6,6 +6,8 @@ import { useAuth } from '@/lib/auth';
 import { SocketProvider, useSocketEvent } from '@/lib/socket';
 import { api } from '@/lib/api';
 import { beep, desktopNotify, requestNotificationPermission } from '@/lib/sound';
+import { Menu } from 'lucide-react';
+import { SidebarProvider, useSidebar } from '@/lib/sidebar';
 import { Sidebar } from '@/components/Sidebar';
 import { SosOverlay } from '@/components/SosOverlay';
 import { Loading, useToast } from '@/components/ui';
@@ -18,6 +20,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const toast = useToast();
   const [unread, setUnread] = useState(0);
   const [sos, setSos] = useState<Incident[]>([]);
+  const { collapsed, setCollapsed } = useSidebar();
 
   const loadUnread = useCallback(async () => {
     if (isSuperAdmin && !org) return;
@@ -60,10 +63,18 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar unreadAlerts={unread} />
+      {!collapsed && <Sidebar unreadAlerts={unread} />}
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1600px] p-6">{children}</div>
       </main>
+      {collapsed && (
+        <button
+          onClick={() => setCollapsed(false)}
+          className="no-print fixed bottom-4 left-4 z-[1500] flex items-center gap-2 rounded-full border border-line bg-panel px-4 py-2.5 text-sm font-medium text-white shadow-xl hover:border-brand/60"
+        >
+          <Menu className="h-4 w-4 text-brand" /> Menu
+        </button>
+      )}
       <SosOverlay incidents={sos} onDismiss={(id) => setSos((l) => l.filter((x) => x.id !== id))} />
     </div>
   );
@@ -78,7 +89,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (loading || !user) return <Loading />;
   return (
     <SocketProvider>
-      <Shell>{children}</Shell>
+      <SidebarProvider>
+        <Shell>{children}</Shell>
+      </SidebarProvider>
     </SocketProvider>
   );
 }

@@ -23,6 +23,8 @@ const RouteSchema = new Schema(
     ],
     strictOrder: { type: Boolean, default: false },
     expectedDurationMinutes: { type: Number, default: 30 },
+    // Heure de départ habituelle "HH:mm" (renseignée par le superviseur à la création de la ronde)
+    startTime: { type: String, default: null },
     active: { type: Boolean, default: true },
   },
   { timestamps: true }

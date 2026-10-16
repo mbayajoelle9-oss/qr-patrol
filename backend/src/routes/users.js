@@ -27,6 +27,11 @@ const userSchema = z.object({
   photo: objectId.nullable().optional(),
 });
 
+/** Un superviseur ne gère que les rondiers (agents) : jamais un admin, un superviseur ou un intervenant. */
+function assertScope(req, role) {
+  if (req.user.role === ROLES.SUPERVISOR && role !== ROLES.AGENT) throw forbidden('Un superviseur ne peut gérer que des rondiers');
+}
+
 /** Ajoute `photo.url` (lien signé) à un document User sérialisé. */
 function withPhoto(json) {
   if (json.photo && typeof json.photo === 'object' && json.photo._id) {
@@ -94,9 +99,10 @@ async function checkPhoto(orgId, photoId) {
 // Création
 router.post(
   '/',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   validate(userSchema),
   asyncHandler(async (req, res) => {
+    assertScope(req, req.body.role);
     const { password, email, ...data } = req.body;
     await checkSites(req.orgId, data.sites);
     await checkPhoto(req.orgId, data.photo);
@@ -113,11 +119,13 @@ router.post(
 // Mise à jour
 router.patch(
   '/:id',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   validate(userSchema.partial()),
   asyncHandler(async (req, res) => {
     const user = await User.findOne({ _id: req.params.id, organization: req.orgId });
     if (!user) throw notFound('Utilisateur introuvable');
+    assertScope(req, user.role);
+    if (req.body.role) assertScope(req, req.body.role);
     const { password, email, ...data } = req.body;
     await checkSites(req.orgId, data.sites);
     await checkPhoto(req.orgId, data.photo);
@@ -137,10 +145,11 @@ router.patch(
 // Réinitialisation du mot de passe
 router.post(
   '/:id/reset-password',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   asyncHandler(async (req, res) => {
     const user = await User.findOne({ _id: req.params.id, organization: req.orgId });
     if (!user) throw notFound();
+    assertScope(req, user.role);
     const tempPassword = String(crypto.randomInt(100000, 999999));
     await user.setPassword(tempPassword);
     user.tokenVersion += 1;

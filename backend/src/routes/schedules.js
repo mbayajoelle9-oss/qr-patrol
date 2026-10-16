@@ -83,7 +83,7 @@ router.get(
 
 router.post(
   '/',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   validate(scheduleSchema),
   asyncHandler(async (req, res) => {
     const route = await check(req.orgId, req.body);
@@ -96,7 +96,7 @@ router.post(
 
 router.patch(
   '/:id',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   validate(scheduleSchema.innerType().partial()),
   asyncHandler(async (req, res) => {
     const schedule = await Schedule.findOne({ _id: req.params.id, organization: req.orgId });
@@ -114,7 +114,7 @@ router.patch(
 
 router.delete(
   '/:id',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   asyncHandler(async (req, res) => {
     const s = await Schedule.findOneAndDelete({ _id: req.params.id, organization: req.orgId });
     if (!s) throw notFound('Planning introuvable');
@@ -125,7 +125,7 @@ router.delete(
 
 router.post(
   '/generate',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   asyncHandler(async (_req, res) => {
     const created = await generateScheduledPatrols({ hoursAhead: 24 });
     res.json({ created });

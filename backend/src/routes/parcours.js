@@ -27,6 +27,7 @@ const routeSchema = z.object({
     .min(1, 'Au moins un point de contrôle'),
   strictOrder: z.boolean().optional(),
   expectedDurationMinutes: z.number().min(1).max(24 * 60).optional(),
+  startTime: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/, 'Format HH:mm').nullable().optional(),
   active: z.boolean().optional(),
 });
 
@@ -76,7 +77,7 @@ router.get(
 
 router.post(
   '/',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   validate(routeSchema),
   asyncHandler(async (req, res) => {
     const site = await Site.findOne({ _id: req.body.site, organization: req.orgId });
@@ -90,7 +91,7 @@ router.post(
 
 router.patch(
   '/:id',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   validate(routeSchema.omit({ site: true }).partial()),
   asyncHandler(async (req, res) => {
     const route = await Route.findOne({ _id: req.params.id, organization: req.orgId });
@@ -106,7 +107,7 @@ router.patch(
 
 router.delete(
   '/:id',
-  requireRole(...ADMIN_ROLES),
+  requireRole(...STAFF_ROLES),
   asyncHandler(async (req, res) => {
     const route = await Route.findOneAndUpdate({ _id: req.params.id, organization: req.orgId }, { active: false });
     if (!route) throw notFound('Parcours introuvable');

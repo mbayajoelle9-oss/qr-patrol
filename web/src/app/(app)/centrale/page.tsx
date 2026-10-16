@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { AlertTriangle, CheckCircle2, Clock, Footprints, ScanLine, ShieldAlert, UserCheck, Wifi } from 'lucide-react';
+import { AlertTriangle, BarChart3, Bell, CheckCircle2, Clock, Footprints, ScanLine, ShieldAlert, Siren, UserCheck, Wifi } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
+import { useAuth } from '@/lib/auth';
 import { useSocketEvent } from '@/lib/socket';
 import { fmtTime, timeAgo, toLatLng } from '@/lib/format';
 import type { Alert, Checkpoint, Incident, Intervention, Patrol, ScanEvent, Site, User } from '@/lib/types';
@@ -26,6 +27,7 @@ interface Overview {
 }
 
 export default function CentralePage() {
+  const { user } = useAuth();
   const { data, setData, loading, error, reload } = useApi<Overview>('/dashboard/overview');
   const [flash, setFlash] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number } | null>(null);
@@ -148,6 +150,25 @@ export default function CentralePage() {
         title="Centrale de sécurité"
         subtitle={`Supervision en temps réel · ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
       />
+
+      {user?.role === 'supervisor' && (
+        <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {[
+            { href: '/incidents', label: 'Incidents', icon: ShieldAlert, badge: k.incidentsOpen },
+            { href: '/interventions', label: 'Interventions', icon: Siren },
+            { href: '/rondes', label: 'Rondes', icon: Footprints },
+            { href: '/scans', label: 'Passages & anomalies', icon: ScanLine },
+            { href: '/alertes', label: 'Alertes', icon: Bell },
+            { href: '/rapports', label: 'Rapports', icon: BarChart3 },
+          ].map(({ href, label, icon: Icon, badge }) => (
+            <Link key={href} href={href} className="flex items-center gap-3 rounded-xl border border-line bg-panel px-4 py-3 text-sm text-white transition hover:border-brand/60">
+              <Icon className="h-5 w-5 text-brand" />
+              <span className="flex-1">{label}</span>
+              {!!badge && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold">{badge}</span>}
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="Agents en service" value={`${k.agentsOnDuty}/${k.agentsTotal}`} icon={<UserCheck className="h-4 w-4" />} hint={`${k.agentsOnline} connecté(s)`} />

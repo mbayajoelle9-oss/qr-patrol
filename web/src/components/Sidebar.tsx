@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
+  CalendarDays,
+  ClipboardList,
+  PanelLeftClose,
+  Route as RouteIcon,
+  UserPlus,
   AlertTriangle,
   BarChart3,
   Bell,
@@ -26,6 +31,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useSocket } from '@/lib/socket';
 import { ROLE_LABELS } from '@/lib/format';
+import { useSidebar } from '@/lib/sidebar';
 import type { Role } from '@/lib/types';
 
 type Item = { href: string; label: string; icon: React.ElementType; roles?: Role[] };
@@ -38,6 +44,16 @@ const CENTRALE: Item[] = [
   { href: '/scans', label: 'Passages & anomalies', icon: ScanLine },
   { href: '/alertes', label: 'Alertes', icon: Bell },
   { href: '/rapports', label: 'Rapports', icon: BarChart3 },
+];
+
+// Menu simplifié du superviseur (gestionnaire au quotidien) : quatre écrans seulement.
+// Incidents, alertes, interventions, passages et rapports sont accessibles depuis son tableau de bord.
+const SUPERVISEUR: Item[] = [
+  { href: '/centrale', label: 'Tableau de bord', icon: Activity },
+  { href: '/superviseur/rondiers', label: 'Master Rondier', icon: UserPlus },
+  { href: '/superviseur/rondes', label: 'Master Ronde', icon: RouteIcon },
+  { href: '/superviseur/planification', label: 'Planification', icon: ClipboardList },
+  { href: '/superviseur/calendrier', label: 'Calendrier', icon: CalendarDays },
 ];
 
 const ADMIN: Item[] = [
@@ -55,7 +71,9 @@ export function Sidebar({ unreadAlerts }: { unreadAlerts: number }) {
   const pathname = usePathname();
   const { user, org, logout, isSuperAdmin } = useAuth();
   const { connected } = useSocket();
+  const { setCollapsed } = useSidebar();
   if (!user) return null;
+  const simple = user.role === 'supervisor';
 
   const link = (i: Item) => {
     if (i.roles && !i.roles.includes(user.role)) return null;
@@ -97,7 +115,8 @@ export function Sidebar({ unreadAlerts }: { unreadAlerts: number }) {
             {link({ href: '/plateforme', label: 'Sociétés clientes', icon: Building2 })}
           </div>
         )}
-        {(!isSuperAdmin || org) && (
+        {simple && <div className="space-y-1">{SUPERVISEUR.map(link)}</div>}
+        {!simple && (!isSuperAdmin || org) && (
           <>
             <div className="space-y-1">
               <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-600">Centrale de sécurité</p>
@@ -112,6 +131,12 @@ export function Sidebar({ unreadAlerts }: { unreadAlerts: number }) {
       </nav>
 
       <div className="border-t border-line p-3">
+        <button
+          onClick={() => setCollapsed(true)}
+          className="mb-2 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-steel hover:bg-white/5 hover:text-white"
+        >
+          <PanelLeftClose className="h-4 w-4" /> Masquer le menu
+        </button>
         {isSuperAdmin && org && (
           <div className="mb-2 flex items-center gap-2 rounded-lg bg-panel-2 px-3 py-2 text-xs text-steel-2">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-400" /> Société : <strong className="text-white">{org.name}</strong>
