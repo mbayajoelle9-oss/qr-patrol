@@ -168,6 +168,8 @@ export interface Schedule {
   windowMinutes: number;
   manual?: boolean;
   active: boolean;
+  validFrom?: string | null;
+  validUntil?: string | null;
 }
 
 export type PatrolStatus = 'scheduled' | 'in_progress' | 'completed' | 'incomplete' | 'missed' | 'cancelled';
