@@ -11,7 +11,7 @@ import { fmtTime, PATROL_STATUS } from '@/lib/format';
 import type { PatrolOccurrence, PatrolRoute, Ref, Schedule, User } from '@/lib/types';
 import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Input, Loading, useToast } from '@/components/ui';
 
-type View = 'day' | 'month' | 'semester';
+type View = 'day' | 'week' | 'month' | 'semester';
 
 const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const NO_AGENT = '__none__';
@@ -78,6 +78,32 @@ export default function CalendrierPage() {
   const { data: routes } = useApi<{ items: PatrolRoute[] }>('/routes', { active: true });
   const schedules = sched?.items || [];
 
+  // Vue semaine : une colonne par jour (lundi → dimanche)
+  const weekDays = useMemo(() => {
+    const mon = new Date(selected.getFullYear(), selected.getMonth(), selected.getDate() - ((selected.getDay() + 6) % 7));
+    return Array.from({ length: 7 }, (_, i) => new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i));
+  }, [selected]);
+  const [weekData, setWeekData] = useState<Record<string, PatrolOccurrence[]>>({});
+  const [weekLoading, setWeekLoading] = useState(false);
+  const weekKey = view === 'week' ? ymd(weekDays[0]) : '';
+  useEffect(() => {
+    if (view !== 'week') return undefined;
+    let cancelled = false;
+    setWeekLoading(true);
+    Promise.all(weekDays.map((d) => api<{ items: PatrolOccurrence[] }>('/patrols/day', { query: { date: ymd(d) } }).then((r) => [ymd(d), r.items] as const)))
+      .then((rows) => {
+        if (!cancelled) setWeekData(Object.fromEntries(rows));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setWeekLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, weekKey]);
+
   const groups = useMemo<AgentGroup[]>(() => {
     const map = new Map<string, AgentGroup>();
     for (const it of data?.items || []) {
@@ -100,6 +126,11 @@ export default function CalendrierPage() {
     setAgentKey(null);
     setView('day');
   }
+  function moveWeek(n: number) {
+    const d = new Date(selected.getFullYear(), selected.getMonth(), selected.getDate() + 7 * n);
+    setSelected(d);
+    setCursor({ y: d.getFullYear(), m: d.getMonth() });
+  }
   function shift(months: number) {
     setCursor((c) => {
       const n = new Date(c.y, c.m + months, 1);
@@ -113,6 +144,7 @@ export default function CalendrierPage() {
 
   const viewButtons: { id: View; label: string }[] = [
     { id: 'day', label: 'Jour' },
+    { id: 'week', label: 'Semaine' },
     { id: 'month', label: 'Mois' },
     { id: 'semester', label: 'Semestre' },
   ];
@@ -133,16 +165,18 @@ export default function CalendrierPage() {
       </div>
       {view !== 'day' && (
         <>
-          <button type="button" onClick={() => shift(view === 'month' ? -1 : -6)} className="rounded p-1.5 text-steel hover:bg-white/5 hover:text-white" aria-label="Précédent">
+          <button type="button" onClick={() => (view === 'week' ? moveWeek(-1) : shift(view === 'month' ? -1 : -6))} className="rounded p-1.5 text-steel hover:bg-white/5 hover:text-white" aria-label="Précédent">
             <ChevronLeft className="h-5 w-5" />
           </button>
           <h1 className="min-w-[200px] text-center text-lg font-semibold capitalize text-white">
-            {view === 'month' ? monthLabel(cursor.y, cursor.m) : `${semStart === 0 ? '1er' : '2e'} semestre ${cursor.y}`}
+            {view === 'week'
+              ? `${weekDays[0].toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}`
+              : view === 'month' ? monthLabel(cursor.y, cursor.m) : `${semStart === 0 ? '1er' : '2e'} semestre ${cursor.y}`}
           </h1>
-          <button type="button" onClick={() => shift(view === 'month' ? 1 : 6)} className="rounded p-1.5 text-steel hover:bg-white/5 hover:text-white" aria-label="Suivant">
+          <button type="button" onClick={() => (view === 'week' ? moveWeek(1) : shift(view === 'month' ? 1 : 6))} className="rounded p-1.5 text-steel hover:bg-white/5 hover:text-white" aria-label="Suivant">
             <ChevronRight className="h-5 w-5" />
           </button>
-          <Button size="sm" variant="ghost" onClick={() => setCursor({ y: today.getFullYear(), m: today.getMonth() })}>
+          <Button size="sm" variant="ghost" onClick={() => { setCursor({ y: today.getFullYear(), m: today.getMonth() }); setSelected(today); }}>
             Aujourd’hui
           </Button>
         </>
@@ -152,6 +186,56 @@ export default function CalendrierPage() {
       </Link>
     </div>
   );
+
+  // ------------------------------------------------------------------ Vue semaine
+  if (view === 'week') {
+    return (
+      <div>
+        {toolbar}
+        {weekLoading && !Object.keys(weekData).length ? (
+          <Loading />
+        ) : (
+          <div className="grid gap-px overflow-hidden rounded-xl border border-line bg-line md:grid-cols-7">
+            {weekDays.map((d) => {
+              const items = [...(weekData[ymd(d)] || [])].sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart));
+              return (
+                <div key={ymd(d)} className={clsx('min-h-[280px] bg-panel', sameDay(d, today) && 'bg-brand/5')}>
+                  <button type="button" onClick={() => goDay(d)} className="w-full border-b border-line px-3 py-2 text-left hover:bg-white/5">
+                    <p className="text-[11px] uppercase text-steel">{d.toLocaleDateString('fr-FR', { weekday: 'short' })}</p>
+                    <p className={clsx('text-lg font-semibold', sameDay(d, today) ? 'text-brand' : 'text-white')}>{d.getDate()}</p>
+                  </button>
+                  <div className="space-y-1.5 p-2">
+                    {!items.length && <p className="px-1 text-xs text-steel">—</p>}
+                    {items.map((it) => {
+                      const st = PATROL_STATUS[it.status];
+                      return (
+                        <button
+                          key={it.id}
+                          type="button"
+                          onClick={() => {
+                            setSelected(d);
+                            setAgentKey(it.agent?.id || NO_AGENT);
+                            setView('day');
+                          }}
+                          className="w-full rounded-md border border-line bg-ink p-2 text-left transition hover:border-brand/60"
+                        >
+                          <p className="font-mono text-xs text-white">{fmtTime(it.scheduledStart)}</p>
+                          <p className="truncate text-xs text-steel-2">{it.agent ? `${it.agent.firstName} ${it.agent.lastName}` : 'Non affecté'}</p>
+                          <p className="truncate text-[11px] text-steel">{it.route?.name}</p>
+                          <Badge tone={st?.tone}>{st?.label || it.status}</Badge>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="mt-2 text-xs text-steel">Cliquez sur un jour ou sur une ronde pour voir le détail.</p>
+      </div>
+    );
+  }
 
   // ------------------------------------------------------------------ Vue mois
   if (view === 'month') {
