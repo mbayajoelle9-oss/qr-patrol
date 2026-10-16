@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { ChevronLeft, ChevronRight, ClipboardList, Clock, ExternalLink, Phone } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardList, ExternalLink, Phone } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/lib/useApi';
 import { useSidebar } from '@/lib/sidebar';
 import { fmtTime, PATROL_STATUS } from '@/lib/format';
 import type { PatrolOccurrence, PatrolRoute, Ref, Schedule, User } from '@/lib/types';
-import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Loading, useToast } from '@/components/ui';
+import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Input, Loading, useToast } from '@/components/ui';
 
 type View = 'day' | 'month' | 'semester';
 
@@ -408,6 +408,7 @@ export default function CalendrierPage() {
 function AssignBox({ agent, date, routes, already, onDone }: { agent: User; date: Date; routes: PatrolRoute[]; already: Set<string | undefined>; onDone: () => void }) {
   const toast = useToast();
   const [picked, setPicked] = useState<string[]>([]);
+  const [times, setTimes] = useState<Record<string, string>>({});
   const [weekly, setWeekly] = useState(false);
   const [busy, setBusy] = useState(false);
   const day = ymd(date);
@@ -418,13 +419,14 @@ function AssignBox({ agent, date, routes, already, onDone }: { agent: User; date
     try {
       for (const rid of picked) {
         const r = routes.find((x) => x.id === rid);
-        if (!r?.startTime) continue;
+        const t = times[rid] || r?.startTime;
+        if (!r || !t) continue;
         // eslint-disable-next-line no-await-in-loop
         await api('/schedules', {
           body: {
             route: rid,
             assignedAgent: agent.id,
-            startTimes: [r.startTime],
+            startTimes: [t],
             daysOfWeek: [date.getDay()],
             windowMinutes: 60,
             ...(weekly ? {} : { validFrom: `${day}T00:00:00+01:00`, validUntil: `${day}T23:59:59+01:00` }),
@@ -454,22 +456,20 @@ function AssignBox({ agent, date, routes, already, onDone }: { agent: User; date
                 <Checkbox
                   label={`${r.name} · ${siteNameOf(r.site)}`}
                   checked={picked.includes(r.id)}
-                  disabled={!r.startTime}
-                  onChange={(e) => setPicked((l) => (e.target.checked ? [...l, r.id] : l.filter((x) => x !== r.id)))}
+                  onChange={(e) => {
+                    setPicked((l) => (e.target.checked ? [...l, r.id] : l.filter((x) => x !== r.id)));
+                    if (e.target.checked) setTimes((t) => ({ ...t, [r.id]: t[r.id] || r.startTime || '' }));
+                  }}
                 />
               </div>
-              {r.startTime ? (
-                <span className="flex items-center gap-1 font-mono text-xs text-sky-300">
-                  <Clock className="h-3 w-3" /> {r.startTime}
-                </span>
-              ) : (
-                <span className="text-[11px] text-amber-400">sans heure</span>
+              {picked.includes(r.id) && (
+                <Input type="time" value={times[r.id] || ''} onChange={(e) => setTimes((t) => ({ ...t, [r.id]: e.target.value }))} className="!w-28 !py-1" />
               )}
             </div>
           ))}
           <div className="flex items-center justify-between gap-2 pt-2">
             <Checkbox label="Répéter chaque semaine ce jour-là" checked={weekly} onChange={(e) => setWeekly(e.target.checked)} />
-            <Button size="sm" loading={busy} disabled={!picked.length} onClick={assign}>
+            <Button size="sm" loading={busy} disabled={!picked.length || picked.some((id) => !times[id])} onClick={assign}>
               Affecter
             </Button>
           </div>

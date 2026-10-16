@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { CalendarDays, Clock, Trash2 } from 'lucide-react';
@@ -31,6 +30,7 @@ export default function PlanificationPage() {
   const { data: schedules, loading, error, reload } = useApi<{ items: Schedule[] }>('/schedules');
   const [picked, setPicked] = useState<string[]>([]);
   const [pickedRoutes, setPickedRoutes] = useState<string[]>([]);
+  const [times, setTimes] = useState<Record<string, string>>({});
   const [days, setDays] = useState<number[]>(ALL_DAYS);
   const [period, setPeriod] = useState<Period>('always');
   const [month, setMonth] = useState(`${now.getFullYear()}-${pad(now.getMonth() + 1)}`);
@@ -52,7 +52,12 @@ export default function PlanificationPage() {
 
   function toggleAgent(id: string, on: boolean) {
     setPicked((l) => (on ? [...l, id] : l.filter((x) => x !== id)));
-    setPickedRoutes([]);
+  }
+
+  // Cocher une ronde reprend son heure de départ ; le superviseur peut la modifier dans le champ qui apparaît
+  function toggleRoute(r: PatrolRoute, on: boolean) {
+    setPickedRoutes((l) => (on ? [...l, r.id] : l.filter((x) => x !== r.id)));
+    if (on) setTimes((t) => ({ ...t, [r.id]: t[r.id] || startOf(r) }));
   }
 
   function periodBounds(): { validFrom: string | null; validUntil: string | null } | string {
@@ -70,6 +75,10 @@ export default function PlanificationPage() {
 
   async function save() {
     const bounds = periodBounds();
+    if (pickedRoutes.some((id) => !times[id])) {
+      toast('Indiquez l’heure de départ des rondes cochées', 'error');
+      return;
+    }
     if (typeof bounds === 'string') {
       toast(bounds, 'error');
       return;
@@ -83,7 +92,7 @@ export default function PlanificationPage() {
           if (!r) continue;
           // eslint-disable-next-line no-await-in-loop
           await api('/schedules', {
-            body: { route: rid, assignedAgent: a, startTimes: [startOf(r)], daysOfWeek: days, windowMinutes: 60, ...bounds },
+            body: { route: rid, assignedAgent: a, startTimes: [times[rid]], daysOfWeek: days, windowMinutes: 60, ...bounds },
           });
         }
       }
@@ -113,7 +122,7 @@ export default function PlanificationPage() {
 
   return (
     <>
-      <PageHeader title="Planification" subtitle="Cochez les rondiers, cochez les rondes : l’heure de départ de chaque ronde est reprise automatiquement." />
+      <PageHeader title="Planification" subtitle="Cochez les rondiers, cochez les rondes : l’heure de départ s’affiche et reste modifiable." />
 
       <Card title="Nouvelle planification">
         <div className="grid gap-5 p-4 md:grid-cols-2">
@@ -135,33 +144,23 @@ export default function PlanificationPage() {
           <div>
             <p className="mb-2 text-xs font-medium text-steel-2">2. Ronde(s)</p>
             <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-lg border border-line p-3">
-              {!picked.length && <p className="text-sm text-steel">Cochez d’abord un rondier.</p>}
-              {!!picked.length && !availableRoutes.length && <p className="text-sm text-steel">Aucune ronde. Créez-en dans « Master Ronde ».</p>}
-              {!!picked.length &&
-                availableRoutes.map((r) => {
-                  const st = startOf(r);
-                  return (
-                    <div key={r.id} className="flex items-center gap-2">
-                      <div className="flex-1">
-                        <Checkbox
-                          label={`${r.name} · ${siteNameOf(r.site)}`}
-                          checked={pickedRoutes.includes(r.id)}
-                          disabled={!st}
-                          onChange={(e) => setPickedRoutes((l) => (e.target.checked ? [...l, r.id] : l.filter((x) => x !== r.id)))}
-                        />
-                      </div>
-                      {st ? (
-                        <span className="flex items-center gap-1 rounded bg-sky-950 px-2 py-0.5 font-mono text-xs text-sky-300">
-                          <Clock className="h-3 w-3" /> {st}
-                        </span>
-                      ) : (
-                        <Link href="/superviseur/rondes" className="text-[11px] text-amber-400 hover:underline">
-                          sans heure : à définir dans Master Ronde
-                        </Link>
-                      )}
+              {!availableRoutes.length && <p className="text-sm text-steel">Aucune ronde. Créez-en dans « Master Ronde ».</p>}
+              {availableRoutes.map((r) => {
+                const on = pickedRoutes.includes(r.id);
+                return (
+                  <div key={r.id} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <Checkbox label={`${r.name} · ${siteNameOf(r.site)}`} checked={on} onChange={(e) => toggleRoute(r, e.target.checked)} />
                     </div>
-                  );
-                })}
+                    {on && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5 text-sky-300" />
+                        <Input type="time" value={times[r.id] || ''} onChange={(e) => setTimes((t) => ({ ...t, [r.id]: e.target.value }))} className="!w-28 !py-1" />
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -207,7 +206,7 @@ export default function PlanificationPage() {
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
           <p className="text-xs text-steel">
-            {total > 0 ? `${picked.length} rondier(s) × ${pickedRoutes.length} ronde(s) : chaque rondier effectuera chaque ronde à son heure de départ.` : ''}
+            {total > 0 ? `${picked.length} rondier(s) × ${pickedRoutes.length} ronde(s) : chaque rondier effectuera chaque ronde à l’heure indiquée.` : ''}
           </p>
           <Button loading={busy} disabled={!picked.length || !pickedRoutes.length || !days.length} onClick={save}>
             <CalendarDays className="h-4 w-4" /> Planifier et voir le calendrier
