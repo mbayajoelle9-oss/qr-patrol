@@ -262,14 +262,14 @@ export default function MasterRondePage() {
               </Select>
             </Field>
             {open === 'new' && templates.length > 0 && (
-              <Field label="Partir de" hint="Modèle défini par l’administrateur pour ce site">
+              <Field label="Parcours à faire" hint="Choisissez le parcours : ses points et ses horaires sont repris automatiquement">
                 <Select value={template} onChange={(e) => applyTemplate(e.target.value)}>
                   {templates.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
                     </option>
                   ))}
-                  <option value="">Tous les points du site (sans horaire)</option>
+                  <option value="">Tous les points du site, j’indique les heures moi-même</option>
                 </Select>
               </Field>
             )}

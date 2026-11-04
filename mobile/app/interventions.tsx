@@ -84,7 +84,10 @@ export default function Interventions() {
           <View style={{ backgroundColor: colors.panel, borderRadius: 16, borderWidth: 1, borderColor: active ? colors.brand : colors.line, padding: 14 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={[styles.text, { fontWeight: '900', fontSize: 17, flex: 1 }]}>{iv.incident.title || iv.incident.type}</Text>
-              <Pill label={ST[iv.status].label} color={ST[iv.status].color} />
+              <Pill
+                label={(ST[iv.status] || { label: iv.status, color: colors.muted }).label}
+                color={(ST[iv.status] || { label: iv.status, color: colors.muted }).color}
+              />
             </View>
             <Text style={[styles.muted, { marginTop: 4 }]}>
               {iv.incident.reference} · envoyée à {fmtTime(iv.dispatchedAt)} · {iv.team?.name || ''}

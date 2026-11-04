@@ -329,7 +329,7 @@ const s = StyleSheet.create({
   corner: { position: 'absolute', width: 44, height: 44, borderColor: colors.brand, borderWidth: 5, borderRadius: 6 },
   bottomBar: { alignItems: 'center', paddingBottom: 30 },
   torch: { backgroundColor: '#000000aa', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 30 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000000cc', alignItems: 'center', justifyContent: 'center' },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: '#000000cc', alignItems: 'center', justifyContent: 'center' },
   result: { borderRadius: 20, alignItems: 'center', padding: 24 },
   resultTitle: { fontSize: 20, fontWeight: '900', marginTop: 8, textAlign: 'center' },
   cpName: { color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 6, textAlign: 'center' },

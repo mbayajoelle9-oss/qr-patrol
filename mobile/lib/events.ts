@@ -6,7 +6,9 @@ export const bus = {
   on(event: string, h: Handler) {
     if (!handlers.has(event)) handlers.set(event, new Set());
     handlers.get(event)!.add(h);
-    return () => handlers.get(event)?.delete(h);
+    return () => {
+      handlers.get(event)?.delete(h);
+    };
   },
   emit(event: string, payload?: unknown) {
     handlers.get(event)?.forEach((h) => h(payload));

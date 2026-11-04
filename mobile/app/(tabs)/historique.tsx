@@ -61,7 +61,10 @@ export default function Historique() {
               <Text style={[styles.text, { fontWeight: '700', flex: 1 }]}>
                 {item.checkpoint ? `${item.checkpoint.code || ''} ${item.checkpoint.name}` : 'QR inconnu'}
               </Text>
-              <Pill label={ST[item.status].label} color={ST[item.status].color} />
+              <Pill
+                label={(ST[item.status] || { label: item.status, color: colors.muted }).label}
+                color={(ST[item.status] || { label: item.status, color: colors.muted }).color}
+              />
             </View>
             <Text style={[styles.muted, { marginTop: 4 }]}>
               {fmtDateTime(item.scannedAt)} · {item.site?.name || ''}
