@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Clock, MapPin, Pencil, Plus, Trash2, Wand2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApi } from '@/lib/useApi';
@@ -53,6 +53,8 @@ export default function MasterRondePage() {
   const [templates, setTemplates] = useState<PatrolRoute[]>([]);
   const [template, setTemplate] = useState(''); // id d'un parcours existant, ou '' = tous les points du site
   const [busy, setBusy] = useState(false);
+  // Une fois que l'utilisateur a tapé l'heure de départ, un chargement tardif ou un changement de parcours ne doit plus l'écraser
+  const timeTouched = useRef(false);
 
   async function loadSite(id: string, preselect: boolean) {
     if (!id) {
@@ -74,7 +76,7 @@ export default function MasterRondePage() {
           setForm((f) => ({
             ...f,
             points: pointsFromRoute(first),
-            startTime: first.startTime || f.startTime,
+            startTime: timeTouched.current ? f.startTime : first.startTime || f.startTime,
             duration: String(first.expectedDurationMinutes || 30),
             strictOrder: first.strictOrder,
           }));
@@ -92,13 +94,14 @@ export default function MasterRondePage() {
     setTemplate(id);
     const r = templates.find((t) => t.id === id);
     if (r) {
-      setForm((f) => ({ ...f, points: pointsFromRoute(r), startTime: r.startTime || f.startTime, duration: String(r.expectedDurationMinutes || 30), strictOrder: r.strictOrder }));
+      setForm((f) => ({ ...f, points: pointsFromRoute(r), startTime: timeTouched.current ? f.startTime : r.startTime || f.startTime, duration: String(r.expectedDurationMinutes || 30), strictOrder: r.strictOrder }));
     } else {
       setForm((f) => ({ ...f, points: siteCps.map((c) => ({ id: c.id, offset: '', window: '10' })) }));
     }
   }
 
   function edit(r: 'new' | PatrolRoute) {
+    timeTouched.current = false;
     setOpen(r);
     setTemplate('');
     if (r === 'new') {
@@ -279,7 +282,14 @@ export default function MasterRondePage() {
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex. Ronde de nuit" />
             </Field>
             <Field label="Heure de départ">
-              <Input type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
+              <Input
+                type="time"
+                value={form.startTime}
+                onChange={(e) => {
+                  timeTouched.current = true;
+                  setForm((f) => ({ ...f, startTime: e.target.value }));
+                }}
+              />
             </Field>
             <Field label="Durée prévue (min)">
               <Input type="number" min={1} value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} />
