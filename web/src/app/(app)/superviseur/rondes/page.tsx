@@ -265,14 +265,14 @@ export default function MasterRondePage() {
               </Select>
             </Field>
             {open === 'new' && templates.length > 0 && (
-              <Field label="Parcours à faire" hint="Choisissez le parcours : ses points et ses horaires sont repris automatiquement">
+              <Field label="Itinéraire (points à contrôler)" hint="Reprend les points d’une ronde existante. Le nom et l’heure de départ de la nouvelle ronde restent les vôtres.">
                 <Select value={template} onChange={(e) => applyTemplate(e.target.value)}>
                   {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
+                    <option key={t.id} value={t.id} className="bg-ink text-white">
+                      Mêmes points que « {t.name} »
                     </option>
                   ))}
-                  <option value="">Tous les points du site, j’indique les heures moi-même</option>
+                  <option value="" className="bg-ink text-white">Tous les points du site, je choisis moi-même</option>
                 </Select>
               </Field>
             )}
