@@ -412,7 +412,17 @@ export default function CalendrierPage() {
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium text-white">{nameOf(g.agent)}</p>
-                          <p className="text-xs text-steel">{g.items.length} ronde(s)</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {(g.key === agentKey ? g.items : g.items.slice(0, 2)).map((it) => {
+                              const st = PATROL_STATUS[it.status];
+                              return (
+                                <Badge key={it.id} tone={st?.tone}>
+                                  <span className="font-mono">{fmtTime(it.scheduledStart)}</span> · {it.route?.name}
+                                </Badge>
+                              );
+                            })}
+                            {g.key !== agentKey && g.items.length > 2 && <span className="text-[11px] text-steel">+{g.items.length - 2} autre(s)</span>}
+                          </div>
                         </div>
                         <ChevronRight className="h-4 w-4 text-steel" />
                       </button>
